@@ -1,0 +1,19 @@
+# SoundFrame Strategy & Vision
+
+## 1. The Problem
+Sharing music on Farcaster is currently fragmented. Users often have to leave the app to listen to SoundCloud tracks, breaking the "social" flow.
+
+## 2. The Solution (Phase 1)
+Build a lightweight, stateless bridge using Frog.fm and Hono.
+- Primary Goal: Convert any SoundCloud URL into a playable Frame v2.
+- Technical Moat: High-speed parsing via OEmbed and a secure, orange-branded player webview.
+
+## 3. The Roadmap (Future Phases)
+- Phase 2: Add "Cast Actions" so users can convert links from any cast they see.
+- Phase 3: Add "Composer Actions" to help users search SoundCloud while writing a cast.
+- Phase 4: Creator Analytics (using stateless signed messages).
+
+## 4. Engineering Philosophy
+- Quality First: As a QA-focused build, we prioritize error handling. If a link is broken, the user should know exactly why.
+- No Bloat: Keep the 'api/' folder lean. No unnecessary libraries.
+- Security: Zero trust on user-provided URLs. Validate everything via the 'api/utils/' logic.

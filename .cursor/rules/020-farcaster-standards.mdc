@@ -1,0 +1,10 @@
+---
+description: "Farcaster Frame v2 and Webview specifications"
+globs: ["api/index.tsx"]
+alwaysApply: false
+---
+# Farcaster Standards
+- **Frame v2:** Use `@farcaster/frame-sdk` for all webview-to-client interactions.
+- **Aspect Ratio:** All Frame images must be 3:2 or 1.91:1.
+- **Mobile First:** The player HTML must include `viewport-fit=cover` and `user-scalable=no`.
+- **Branding:** Use the SoundCloud Orange constant (`#FF5500`) for primary action buttons.

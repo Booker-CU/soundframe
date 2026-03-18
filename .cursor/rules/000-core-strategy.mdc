@@ -1,0 +1,10 @@
+---
+description: "Core architecture and stateless design for SoundFrame"
+globs: ["api/**/*"]
+alwaysApply: true
+---
+# Core Strategy
+- **Architecture:** Maintain a stateless, universal design. Data must be carried in URLs, not a database.
+- **Stack:** Prioritize Frog.fm (Hono) and Vercel Edge functions.
+- **Environment:** All code must run in the Vercel Edge Runtime (no Node.js-only APIs like 'fs').
+- **Reference:** Always check @PRD.md for feature requirements and @PROJECT_STRATEGY.txt for vision.

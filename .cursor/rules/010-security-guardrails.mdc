@@ -1,0 +1,10 @@
+---
+description: "Security protocols for URL parsing and player injection"
+globs: ["api/utils/*.ts", "api/index.tsx"]
+alwaysApply: true
+---
+# Security Guardrails
+- **Host Validation:** Before any `fetch` or processing, verify the input URL hostname is exactly `soundcloud.com` or `www.soundcloud.com`.
+- **Sanitization:** All `trackId` parameters must pass a strict alphanumeric regex check before being used in HTML attributes or iframes.
+- **Validation Library:** Use `zod` for all schema validation of incoming request bodies or query parameters.
+- **XSS Prevention:** Never use `dangerouslySetInnerHTML` with raw user-provided strings.
