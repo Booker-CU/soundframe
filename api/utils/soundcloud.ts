@@ -28,15 +28,15 @@ type OEmbedResponse = {
   [key: string]: unknown
 }
 
+export type ParseSoundCloudUrlResult =
+  | { ok: true; trackId: string }
+  | { ok: false; error: 'unresolvable' }
+
 /**
- * Resolves a user-provided SoundCloud URL into a sanitized SoundCloud `trackId`.
- *
- * Implementation notes:
- * - We call SoundCloud's oEmbed endpoint for tracks.
- * - The oEmbed `html` contains an iframe src which references `api.soundcloud.com/tracks/<trackId>`.
- * - We extract the trackId via regex and validate it with the strict alphanumeric guardrail.
+ * Resolves a user-provided SoundCloud URL into a sanitized SoundCloud `trackId`
+ * using SoundCloud's oEmbed JSON + a regex extraction from the returned `html`.
  */
-export async function resolveSoundCloudTrackId(inputUrlRaw: string): Promise<string> {
+async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<string | null> {
   // Validate early with zod.
   const inputUrlStr = SoundCloudUrlSchema.parse(inputUrlRaw)
   const inputUrl = new URL(inputUrlStr)
@@ -44,7 +44,7 @@ export async function resolveSoundCloudTrackId(inputUrlRaw: string): Promise<str
   // Guardrail: verify hostname before any fetch.
   assertSoundCloudHostname(inputUrl)
 
-  const oEmbedUrl = `https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(inputUrlStr)}`
+  const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`
   const res = await fetch(oEmbedUrl, {
     method: 'GET',
     headers: {
@@ -53,22 +53,44 @@ export async function resolveSoundCloudTrackId(inputUrlRaw: string): Promise<str
   })
 
   if (!res.ok) {
-    throw new Error('SoundCloud oEmbed request failed.')
+    return null
   }
 
   const json = (await res.json()) as OEmbedResponse
   const html = typeof json?.html === 'string' ? json.html : ''
 
-  // Extract trackId from oEmbed iframe src.
-  // Example: ... api.soundcloud.com/tracks/<TRACK_ID> ...
-  const match = html.match(/api\.soundcloud\.com\/tracks\/([A-Za-z0-9]+)/)
-  if (!match?.[1]) {
-    throw new Error('Could not resolve SoundCloud trackId.')
-  }
+  // Extract the numeric track id from the oEmbed iframe `src`.
+  // SoundCloud sometimes percent-encodes portions of the `url=` parameter.
+  const match =
+    html.match(/api\.soundcloud\.com\/tracks(?:%2F|\/)([0-9]+)/) ??
+    html.match(/api\.soundcloud\.com%2Ftracks(?:%2F|\/)([0-9]+)/) ??
+    html.match(/api\.soundcloud\.com%2Ftracks%2F([0-9]+)/)
+
+  if (!match?.[1]) return null
 
   // Guardrail: sanitize/validate before usage in HTML/iframe params.
-  const trackId = TrackIdSchema.parse(match[1])
-  return trackId
+  try {
+    return TrackIdSchema.parse(match[1])
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Test/PRD-facing API: parse a user-provided SoundCloud URL into a sanitized track id.
+ *
+ * Returns:
+ * - `{ ok: true, trackId }` on success (trackId is validated as strictly alphanumeric).
+ * - `{ ok: false, error: 'unresolvable' }` when the track cannot be resolved (invalid/private/etc).
+ */
+export async function parseSoundCloudUrl(inputUrlRaw: string): Promise<ParseSoundCloudUrlResult> {
+  const trackId = await resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw)
+
+  if (!trackId) {
+    return { ok: false, error: 'unresolvable' }
+  }
+
+  return { ok: true, trackId }
 }
 
 function normalizeColorHex(colorHexRaw: string): string {
