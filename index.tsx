@@ -1,4 +1,4 @@
-import { Button, Frog } from 'frog'
+import { Button, Frog, TextInput } from 'frog'
 // import { neynar } from 'frog/hubs'
 import { z } from 'zod'
 import { parseSoundCloudUrl } from './api/utils/soundcloud.js'
@@ -30,32 +30,46 @@ async function fetchSoundCloudOEmbedArtwork(inputUrlRaw: string): Promise<{
   }
 
   const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlRaw)}&format=json`
-  const res = await fetch(oEmbedUrl, {
-    method: 'GET',
-    headers: {
-      accept: 'application/json',
-    },
-  })
-
-  if (!res.ok) return null
-
-  const json = (await res.json()) as unknown
-  const parsed = z
-    .object({
-      thumbnail_url: z.string().url().optional(),
-      title: z.string().optional(),
-      author_name: z.string().optional(),
+  try {
+    const res = await fetch(oEmbedUrl, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
     })
-    .catchall(z.unknown())
-    .safeParse(json)
 
-  if (!parsed.success) return null
+    if (!res.ok) return null
 
-  const data = parsed.data as OEmbedResponse
-  return {
-    thumbnailUrl: typeof data.thumbnail_url === 'string' ? data.thumbnail_url : undefined,
-    title: typeof data.title === 'string' ? data.title : undefined,
-    authorName: typeof data.author_name === 'string' ? data.author_name : undefined,
+    const text = await res.text()
+    console.log('SoundCloud API Response:', text)
+    if (!text.trim()) return null
+
+    let json: unknown
+    try {
+      json = JSON.parse(text)
+    } catch {
+      return null
+    }
+
+    const parsed = z
+      .object({
+        thumbnail_url: z.string().url().optional(),
+        title: z.string().optional(),
+        author_name: z.string().optional(),
+      })
+      .catchall(z.unknown())
+      .safeParse(json)
+
+    if (!parsed.success) return null
+
+    const data = parsed.data as OEmbedResponse
+    return {
+      thumbnailUrl: typeof data.thumbnail_url === 'string' ? data.thumbnail_url : undefined,
+      title: typeof data.title === 'string' ? data.title : undefined,
+      authorName: typeof data.author_name === 'string' ? data.author_name : undefined,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -71,18 +85,35 @@ export const app = new Frog({
   title: 'SoundFrame',
 })
 
+// Guard malformed /frame/image requests before Frog parses compressed payload.
+app.hono.use('/frame/image', async (c, next) => {
+  const imageParam = c.req.query('image')
+  if (!imageParam || !imageParam.trim()) {
+    const origin = new URL(c.req.url).origin
+    return c.redirect(new URL('/icon.png', origin).toString(), 302)
+  }
+  return next()
+})
+
 app.frame('/frame', async (c) => {
-  const inputUrlRaw = c.req.query('url')
-  const queryParse = UrlQuerySchema.safeParse({ url: inputUrlRaw })
+  const queryUrl = c.req.query('url')
+  const inputText = typeof c.inputText === 'string' ? c.inputText.trim() : ''
+  const inputUrlRaw =
+    typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl : inputText || undefined
+  const queryParse =
+    typeof inputUrlRaw === 'string' && inputUrlRaw.trim()
+      ? UrlQuerySchema.safeParse({ url: inputUrlRaw })
+      : null
 
   const retryTarget =
     typeof inputUrlRaw === 'string'
       ? `/frame?url=${encodeURIComponent(inputUrlRaw)}`
       : '/frame'
+  const origin = new URL(c.req.url).origin
 
   const renderError = () =>
     c.res({
-      imageOptions: { width: 900, height: 600 },
+      imageOptions: { width: 900, height: 600, embedFont: true },
       image: (
         <div
           style={{
@@ -99,6 +130,7 @@ app.frame('/frame', async (c) => {
           <div
             style={{
               color: 'white',
+              display: 'flex',
               fontSize: 62,
               fontStyle: 'normal',
               fontWeight: 800,
@@ -111,10 +143,11 @@ app.frame('/frame', async (c) => {
           </div>
           <div
             style={{
-              marginTop: 18,
               color: theme.primary,
+              display: 'flex',
               fontSize: 30,
               fontWeight: 700,
+              marginTop: 18,
               padding: '0 50px',
             }}
           >
@@ -124,6 +157,88 @@ app.frame('/frame', async (c) => {
       ),
       intents: [<Button action={retryTarget}>Retry</Button>],
     })
+
+  const renderLanding = () =>
+    c.res({
+      imageOptions: { width: 900, height: 600, embedFont: true },
+      image: (
+        <div
+          style={{
+            alignItems: 'center',
+            background: theme.background,
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            justifyContent: 'center',
+            width: '100%',
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              color: theme.primary,
+              display: 'flex',
+              fontSize: 30,
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              lineHeight: 1.1,
+            }}
+          >
+            SOUND FRAME
+          </div>
+          <div
+            style={{
+              color: 'white',
+              display: 'flex',
+              fontSize: 64,
+              fontStyle: 'normal',
+              fontWeight: 800,
+              letterSpacing: '-0.025em',
+              lineHeight: 1.2,
+              marginTop: 18,
+              padding: '0 70px',
+            }}
+          >
+            Paste a SoundCloud link
+          </div>
+          <div
+            style={{
+              color: '#d4d4d4',
+              display: 'flex',
+              fontSize: 30,
+              fontWeight: 700,
+              marginTop: 18,
+              padding: '0 60px',
+            }}
+          >
+            Then tap Load Track to open player
+          </div>
+          <div
+            style={{
+              background: theme.primary,
+              borderRadius: 999,
+              display: 'flex',
+              height: 12,
+              marginTop: 30,
+              width: 260,
+            }}
+          />
+        </div>
+      ),
+      intents: [
+        <TextInput placeholder='Paste SoundCloud URL' />,
+        <Button action='/frame'>Load Track</Button>,
+        <Button
+          action={`/frame?url=${encodeURIComponent('https://soundcloud.com/forss/flickermood')}`}
+        >
+          Try Demo Track
+        </Button>,
+      ],
+    })
+
+  if (!queryParse) {
+    return renderLanding()
+  }
 
   if (!queryParse.success) {
     return renderError()
@@ -147,132 +262,46 @@ app.frame('/frame', async (c) => {
   }
 
   const { trackId } = parsed
+  const placeholderUrl = new URL('/icon.png', origin).toString()
 
-  // Artwork: prefer oEmbed thumbnail_url, otherwise use a branded placeholder.
-  let artworkThumbnailUrl: string | undefined
-  let artworkTitle: string | undefined
+  let artworkUrl = placeholderUrl
   try {
     const oEmbed = await fetchSoundCloudOEmbedArtwork(urlRaw)
-    artworkThumbnailUrl = oEmbed?.thumbnailUrl
-    artworkTitle = oEmbed?.title
+    if (oEmbed?.thumbnailUrl) {
+      artworkUrl = oEmbed.thumbnailUrl
+    }
   } catch {
-    // If oEmbed fails for any reason, fall back to placeholder.
+    // Fallback to local placeholder if oEmbed fetch fails.
   }
-
-  const origin = new URL(c.req.url).origin
-  const placeholderUrl = new URL('/icon.png', origin).toString()
-  const artworkUrl = artworkThumbnailUrl ?? placeholderUrl
 
   // PRD specifies the player webview at /player/:trackId (root path).
   // Use an absolute URL so Frog doesn't prefix it with `basePath` (/api).
   const listenTarget = `${origin}/player/${trackId}`
 
   return c.res({
-    imageOptions: { width: 900, height: 600 },
+    imageOptions: { width: 900, height: 600, embedFont: false },
     image: (
       <div
         style={{
-          background: theme.background,
+          background: 'black',
+          alignItems: 'center',
+          display: 'flex',
           height: '100%',
-          position: 'relative',
+          justifyContent: 'center',
+          overflow: 'hidden',
           width: '100%',
         }}
       >
-        <div
+        <img
+          alt='SoundFrame artwork'
+          src={artworkUrl}
           style={{
-            position: 'absolute',
-            inset: 0,
-            padding: 44,
+            height: '100%',
+            objectFit: 'contain',
+            objectPosition: 'center',
+            width: '100%',
           }}
-        >
-          <div
-            style={{
-              borderRadius: 26,
-              overflow: 'hidden',
-              position: 'relative',
-              width: '100%',
-              height: '100%',
-              background: 'black',
-            }}
-          >
-            <img
-              alt={artworkTitle ? `Artwork for ${artworkTitle}` : 'SoundFrame artwork'}
-              src={artworkUrl}
-              style={{
-                height: '100%',
-                width: '100%',
-                objectFit: 'cover',
-              }}
-            />
-
-            {/* Orange play overlay */}
-            <div
-              style={{
-                alignItems: 'center',
-                background: 'rgba(0,0,0,0.22)',
-                display: 'flex',
-                height: '100%',
-                justifyContent: 'center',
-                width: '100%',
-              }}
-            >
-              <div
-                style={{
-                  alignItems: 'center',
-                  background: theme.primary,
-                  borderRadius: 999,
-                  color: 'black',
-                  display: 'flex',
-                  height: 110,
-                  justifyContent: 'center',
-                  width: 110,
-                  fontSize: 54,
-                  lineHeight: 1,
-                  fontWeight: 900,
-                }}
-              >
-                ▶
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            position: 'absolute',
-            left: 44,
-            right: 44,
-            bottom: 26,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-            gap: 18,
-          }}
-        >
-          <div
-            style={{
-              color: 'white',
-              fontSize: 26,
-              fontWeight: 800,
-              maxWidth: 560,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {artworkTitle ? artworkTitle : 'SoundFrame'}
-          </div>
-          <div
-            style={{
-              color: theme.primary,
-              fontSize: 26,
-              fontWeight: 900,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ▶️ Listen
-          </div>
-        </div>
+        />
       </div>
     ),
     intents: [<Button action={listenTarget}>▶️ Listen</Button>],

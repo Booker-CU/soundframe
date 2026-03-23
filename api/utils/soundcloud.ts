@@ -28,6 +28,24 @@ type OEmbedResponse = {
   [key: string]: unknown
 }
 
+function isOEmbedDebugEnabled(): boolean {
+  // Keep this opt-in so production logs stay quiet.
+  return (
+    typeof process !== 'undefined' &&
+    typeof process.env?.SOUNDFRAME_DEBUG_OEMBED === 'string' &&
+    process.env.SOUNDFRAME_DEBUG_OEMBED === '1'
+  )
+}
+
+function logOEmbedDebug(message: string, data?: Record<string, unknown>) {
+  if (!isOEmbedDebugEnabled()) return
+  if (data) {
+    console.log(`[soundframe:oembed] ${message}`, data)
+    return
+  }
+  console.log(`[soundframe:oembed] ${message}`)
+}
+
 export type ParseSoundCloudUrlResult =
   | { ok: true; trackId: string }
   | { ok: false; error: 'unresolvable' }
@@ -37,27 +55,49 @@ export type ParseSoundCloudUrlResult =
  * using SoundCloud's oEmbed JSON + a regex extraction from the returned `html`.
  */
 async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<string | null> {
-  // Validate early with zod.
-  const inputUrlStr = SoundCloudUrlSchema.parse(inputUrlRaw)
-  const inputUrl = new URL(inputUrlStr)
+  try {
+    // Validate early with zod.
+    const inputUrlStr = SoundCloudUrlSchema.parse(inputUrlRaw)
+    const inputUrl = new URL(inputUrlStr)
 
-  // Guardrail: verify hostname before any fetch.
-  assertSoundCloudHostname(inputUrl)
+    // Guardrail: verify hostname before any fetch.
+    assertSoundCloudHostname(inputUrl)
 
-  const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`
-  const res = await fetch(oEmbedUrl, {
-    method: 'GET',
-    headers: {
-      accept: 'application/json',
-    },
-  })
+    const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`
+    const res = await fetch(oEmbedUrl, {
+      method: 'GET',
+      headers: {
+        accept: 'application/json',
+      },
+    })
 
-  if (!res.ok) {
-    return null
-  }
+    if (!res.ok) {
+      logOEmbedDebug('oEmbed request failed', {
+        status: res.status,
+        statusText: res.statusText,
+        url: oEmbedUrl,
+      })
+      return null
+    }
 
-  const json = (await res.json()) as OEmbedResponse
-  const html = typeof json?.html === 'string' ? json.html : ''
+    // SoundCloud may occasionally return non-JSON error text with 200 status.
+    // Parse defensively to avoid throwing during frame rendering.
+    const text = await res.text()
+    if (!text.trim()) return null
+
+    let json: unknown
+    try {
+      json = JSON.parse(text)
+    } catch {
+      logOEmbedDebug('oEmbed returned non-JSON body', {
+        status: res.status,
+        bodyPreview: text.slice(0, 120),
+      })
+      return null
+    }
+
+    const oEmbed = json as OEmbedResponse
+    const html = typeof oEmbed.html === 'string' ? oEmbed.html : ''
 
   // Extract the numeric track id from the oEmbed iframe `src`.
   // SoundCloud sometimes percent-encodes portions of the `url=` parameter.
@@ -66,11 +106,14 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<s
     html.match(/api\.soundcloud\.com%2Ftracks(?:%2F|\/)([0-9]+)/) ??
     html.match(/api\.soundcloud\.com%2Ftracks%2F([0-9]+)/)
 
-  if (!match?.[1]) return null
+    if (!match?.[1]) return null
 
-  // Guardrail: sanitize/validate before usage in HTML/iframe params.
-  try {
-    return TrackIdSchema.parse(match[1])
+    // Guardrail: sanitize/validate before usage in HTML/iframe params.
+    try {
+      return TrackIdSchema.parse(match[1])
+    } catch {
+      return null
+    }
   } catch {
     return null
   }
