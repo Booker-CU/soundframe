@@ -1,9 +1,11 @@
 import { z } from 'zod'
 
 // Security guardrails:
-// - Only accept SoundCloud hostnames.
+// - Canonical URLs must use soundcloud.com / www.soundcloud.com before oEmbed processing.
+// - Mobile share short links (on.soundcloud.com) are resolved to canonical URLs first.
 // - Only accept strictly alphanumeric track IDs before using them in iframe URLs.
-const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
+const SOUND_CLOUD_CANONICAL_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
+const SOUND_CLOUD_SHORT_LINK_HOSTS = new Set(['on.soundcloud.com'])
 
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
 
@@ -17,9 +19,66 @@ const SoundCloudUrlSchema = z
     message: 'Invalid URL.',
   })
 
-function assertSoundCloudHostname(inputUrl: URL) {
-  if (!SOUND_CLOUD_ALLOWED_HOSTS.has(inputUrl.hostname)) {
+function assertSoundCloudCanonicalHostname(inputUrl: URL) {
+  if (!SOUND_CLOUD_CANONICAL_HOSTS.has(inputUrl.hostname)) {
     throw new Error('Invalid SoundCloud hostname.')
+  }
+}
+
+function trimTrailingUrlPunctuation(url: string): string {
+  return url.replace(/[)\]},.!?;:]+$/, '')
+}
+
+/**
+ * Pulls a SoundCloud URL from free-form share text (mobile shares prepend conversational copy).
+ * Prefers soundcloud.com links when multiple http(s) URLs are present.
+ */
+export function extractSoundCloudUrlFromText(text: string): string | null {
+  const normalized = text.replace(/\u200b/g, '').trim()
+  const scMatches = normalized.match(/https?:\/\/(?:[\w-]+\.)*soundcloud\.com\/[^\s<>"']+/gi)
+  if (scMatches?.length) {
+    return trimTrailingUrlPunctuation(scMatches[scMatches.length - 1])
+  }
+  const urlMatch = normalized.match(/https?:\/\/[^\s<>"']+/)
+  return urlMatch ? trimTrailingUrlPunctuation(urlMatch[0]) : null
+}
+
+/**
+ * Returns a canonical soundcloud.com track URL, following mobile share short links when needed.
+ */
+export async function normalizeSoundCloudInputUrl(inputUrlRaw: string): Promise<string | null> {
+  let inputUrlStr: string
+  try {
+    inputUrlStr = SoundCloudUrlSchema.parse(inputUrlRaw)
+  } catch {
+    return null
+  }
+
+  const inputUrl = new URL(inputUrlStr)
+  if (SOUND_CLOUD_CANONICAL_HOSTS.has(inputUrl.hostname)) {
+    return `${inputUrl.origin}${inputUrl.pathname}`
+  }
+
+  if (!SOUND_CLOUD_SHORT_LINK_HOSTS.has(inputUrl.hostname)) {
+    return null
+  }
+
+  try {
+    const res = await fetch(inputUrlStr, {
+      method: 'GET',
+      redirect: 'follow',
+      headers: { accept: 'text/html' },
+    })
+    if (!res.ok) return null
+
+    const finalUrl = new URL(res.url)
+    if (!SOUND_CLOUD_CANONICAL_HOSTS.has(finalUrl.hostname)) {
+      return null
+    }
+
+    return `${finalUrl.origin}${finalUrl.pathname}`
+  } catch {
+    return null
   }
 }
 
@@ -61,7 +120,7 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<s
     const inputUrl = new URL(inputUrlStr)
 
     // Guardrail: verify hostname before any fetch.
-    assertSoundCloudHostname(inputUrl)
+    assertSoundCloudCanonicalHostname(inputUrl)
 
     const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`
     const res = await fetch(oEmbedUrl, {
@@ -127,7 +186,12 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<s
  * - `{ ok: false, error: 'unresolvable' }` when the track cannot be resolved (invalid/private/etc).
  */
 export async function parseSoundCloudUrl(inputUrlRaw: string): Promise<ParseSoundCloudUrlResult> {
-  const trackId = await resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw)
+  const canonicalUrl = await normalizeSoundCloudInputUrl(inputUrlRaw)
+  if (!canonicalUrl) {
+    return { ok: false, error: 'unresolvable' }
+  }
+
+  const trackId = await resolveSoundCloudTrackIdViaOEmbed(canonicalUrl)
 
   if (!trackId) {
     return { ok: false, error: 'unresolvable' }

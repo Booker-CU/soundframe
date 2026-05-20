@@ -4,7 +4,12 @@ import { serveStatic } from 'frog/serve-static'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { FARCASTER_MANIFEST } from './api/manifest.js'
-import { buildSoundCloudPlayerIframeUrl, parseSoundCloudUrl } from './api/utils/soundcloud.js'
+import {
+  buildSoundCloudPlayerIframeUrl,
+  extractSoundCloudUrlFromText,
+  normalizeSoundCloudInputUrl,
+  parseSoundCloudUrl,
+} from './api/utils/soundcloud.js'
 import { theme } from './api/styles/theme.js'
 
 const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
@@ -315,17 +320,18 @@ app.fetch = async (request, env, executionCtx) => {
 
 app.frame('/frame', async (c) => {
   const queryUrl = c.req.query('url')
-  const inputText = typeof c.inputText === 'string' ? c.inputText.trim() : ''
-  const inputUrlRaw =
-    typeof queryUrl === 'string' && queryUrl.trim() ? queryUrl : inputText || undefined
-  const queryParse =
-    typeof inputUrlRaw === 'string' && inputUrlRaw.trim()
-      ? UrlQuerySchema.safeParse({ url: inputUrlRaw })
-      : null
+  const input = typeof c.inputText === 'string' ? c.inputText.trim() : ''
+  const queryUrlTrimmed = typeof queryUrl === 'string' ? queryUrl.trim() : ''
+  const inputUrlExtracted = queryUrlTrimmed
+    ? extractSoundCloudUrlFromText(queryUrlTrimmed) ?? undefined
+    : input
+      ? extractSoundCloudUrlFromText(input) ?? undefined
+      : undefined
+  const submittedTextWithoutUrl = !queryUrlTrimmed && Boolean(input) && !inputUrlExtracted
 
   const retryTarget =
-    typeof inputUrlRaw === 'string'
-      ? `/frame?url=${encodeURIComponent(inputUrlRaw)}`
+    typeof inputUrlExtracted === 'string'
+      ? `/frame?url=${encodeURIComponent(inputUrlExtracted)}`
       : '/frame'
   const origin = new URL(c.req.url).origin
 
@@ -454,19 +460,25 @@ app.frame('/frame', async (c) => {
       ],
     })
 
-  if (!queryParse) {
+  if (submittedTextWithoutUrl) {
+    return renderError()
+  }
+
+  if (!inputUrlExtracted) {
     return renderLanding()
   }
 
+  const queryParse = UrlQuerySchema.safeParse({ url: inputUrlExtracted })
   if (!queryParse.success) {
     return renderError()
   }
 
-  const urlRaw = queryParse.data.url
-  const inputUrl = new URL(urlRaw)
-  if (!SOUND_CLOUD_ALLOWED_HOSTS.has(inputUrl.hostname)) {
+  const urlCanonical = await normalizeSoundCloudInputUrl(queryParse.data.url)
+  if (!urlCanonical) {
     return renderError()
   }
+
+  const urlRaw = urlCanonical
 
   let parsed: Awaited<ReturnType<typeof parseSoundCloudUrl>>
   try {
