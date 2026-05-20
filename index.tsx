@@ -142,7 +142,6 @@ function handlePlayerRequest(c: Context) {
   const origin = new URL(c.req.url).origin
   const fallbackArtworkSrc = new URL('/icon.png', origin).toString()
   const artworkSrc = parseArtworkFromQuery(c.req.query('artwork')) ?? fallbackArtworkSrc
-  const shareText = `Listening on SoundFrame: https://soundcloud.com/tracks/${trackId}`
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
     trackId,
     colorHex: theme.primary,
@@ -209,6 +208,13 @@ function handlePlayerRequest(c: Context) {
         font-weight: 700;
         font-size: 16px;
       }
+      #share-btn:hover {
+        background-color: #2a2a2a;
+        opacity: 0.9;
+      }
+      #share-btn:active {
+        transform: scale(0.98);
+      }
     </style>
   </head>
   <body>
@@ -229,22 +235,35 @@ function handlePlayerRequest(c: Context) {
         allow="autoplay"
         src="${playerSrc}"
       ></iframe>
-      <button id="shareButton" class="share" type="button">Share</button>
+      <button
+        id="share-btn"
+        class="share"
+        type="button"
+        style="cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;"
+      >Share</button>
     </main>
 
     <script type="module">
       import { sdk } from 'https://cdn.jsdelivr.net/npm/@farcaster/frame-sdk@0.1.14/+esm'
 
-      const shareText = ${JSON.stringify(shareText)}
-      const shareButton = document.getElementById('shareButton')
-
+      window.sdk = sdk
       await sdk.actions.ready()
+    </script>
+    <script>
+      const shareBtn = document.getElementById('share-btn');
+      if (shareBtn) {
+        shareBtn.addEventListener('click', () => {
+          const currentUrl = window.location.href;
+          const shareText = "Listening to a mix on SoundFrame! 🎵";
+          const warpcastComposeUrl = \`https://warpcast.com/~/compose?text=\${encodeURIComponent(shareText)}&embeds[]=\${encodeURIComponent(currentUrl)}\`;
 
-      shareButton?.addEventListener('click', async () => {
-        await sdk.actions.composeCast({
-          text: shareText,
-        })
-      })
+          if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
+            window.sdk.actions.openUrl({ url: warpcastComposeUrl });
+          } else {
+            window.open(warpcastComposeUrl, '_blank');
+          }
+        });
+      }
     </script>
   </body>
 </html>`)
