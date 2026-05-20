@@ -1,6 +1,7 @@
 import { Button, Frog, TextInput } from 'frog'
 // import { neynar } from 'frog/hubs'
 import { serveStatic } from 'frog/serve-static'
+import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { FARCASTER_MANIFEST } from './api/manifest.js'
 import { buildSoundCloudPlayerIframeUrl, parseSoundCloudUrl } from './api/utils/soundcloud.js'
@@ -91,36 +92,9 @@ function isValidTrackId(trackId: string) {
   return TRACK_ID_ALPHANUM_RE.test(trackId)
 }
 
-export const app = new Frog({
-  assetsPath: '/',
-  basePath: '/api',
-  // Supply a Hub to enable frame verification.
-  // hub: neynar({ apiKey: 'NEYNAR_FROG_FM' })
-  title: 'SoundFrame',
-})
+const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
 
-// Served at /api/.well-known/farcaster.json; root path handled in api/index.tsx fetch wrapper.
-app.hono.get('/.well-known/farcaster.json', (c) => {
-  c.header('Content-Type', 'application/json')
-  c.header('Access-Control-Allow-Origin', '*')
-  return c.json(FARCASTER_MANIFEST)
-})
-
-// Expose files in /public at the app root.
-app.hono.use('/*', serveStatic({ root: './public' }))
-app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
-
-// Guard malformed /frame/image requests before Frog parses compressed payload.
-app.hono.use('/frame/image', async (c, next) => {
-  const imageParam = c.req.query('image')
-  if (!imageParam || !imageParam.trim()) {
-    const origin = new URL(c.req.url).origin
-    return c.redirect(new URL('/icon.png', origin).toString(), 302)
-  }
-  return next()
-})
-
-app.hono.get('/player/:trackId', (c) => {
+function handlePlayerRequest(c: Context) {
   const parsedParams = PlayerTrackParamsSchema.safeParse(c.req.param())
   if (!parsedParams.success) {
     return c.html(
@@ -237,7 +211,51 @@ app.hono.get('/player/:trackId', (c) => {
     </script>
   </body>
 </html>`)
+}
+
+// Root routes (outside Frog basePath `/api`) — matches vercel.json `/player` rewrite in production.
+export const rootHono = new Hono()
+rootHono.get('/player/:trackId', handlePlayerRequest)
+
+export const app = new Frog({
+  assetsPath: '/',
+  basePath: '/api',
+  // Supply a Hub to enable frame verification.
+  // hub: neynar({ apiKey: 'NEYNAR_FROG_FM' })
+  title: 'SoundFrame',
 })
+
+// Served at /api/.well-known/farcaster.json; root path handled in api/index.tsx fetch wrapper.
+app.hono.get('/.well-known/farcaster.json', (c) => {
+  c.header('Content-Type', 'application/json')
+  c.header('Access-Control-Allow-Origin', '*')
+  return c.json(FARCASTER_MANIFEST)
+})
+
+// Expose files in /public at the app root.
+app.hono.use('/*', serveStatic({ root: './public' }))
+app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
+
+// Guard malformed /frame/image requests before Frog parses compressed payload.
+app.hono.use('/frame/image', async (c, next) => {
+  const imageParam = c.req.query('image')
+  if (!imageParam || !imageParam.trim()) {
+    const origin = new URL(c.req.url).origin
+    return c.redirect(new URL('/icon.png', origin).toString(), 302)
+  }
+  return next()
+})
+
+app.hono.get('/player/:trackId', handlePlayerRequest)
+
+const frogFetch = app.fetch.bind(app)
+app.fetch = async (request, env, executionCtx) => {
+  const { pathname } = new URL(request.url)
+  if (PLAYER_PATH_RE.test(pathname)) {
+    return rootHono.fetch(request, env, executionCtx)
+  }
+  return frogFetch(request, env, executionCtx)
+}
 
 app.frame('/frame', async (c) => {
   const queryUrl = c.req.query('url')
