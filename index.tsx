@@ -3,10 +3,11 @@ import { Button, Frog, TextInput } from 'frog'
 import { serveStatic } from 'frog/serve-static'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { FARCASTER_MANIFEST } from './api/manifest.js'
+import { buildFarcasterManifest } from './api/manifest.js'
 import {
   buildSoundCloudPlayerIframeUrl,
   extractSoundCloudUrlFromText,
+  frameArtworkUrlFromOEmbed,
   normalizeSoundCloudInputUrl,
   parseSoundCloudUrl,
 } from './api/utils/soundcloud.js'
@@ -14,6 +15,21 @@ import { theme } from './api/styles/theme.js'
 
 const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
+
+/** Match landing frame (900×600) so the pre-load flash is not a huge 1:1 square. */
+const LANDSCAPE_FRAME_WIDTH = 900
+const LANDSCAPE_FRAME_HEIGHT = 600
+const LANDSCAPE_FRAME_IMAGE_OPTS = {
+  width: LANDSCAPE_FRAME_WIDTH,
+  height: LANDSCAPE_FRAME_HEIGHT,
+  embedFont: false,
+} as const
+
+/** Avoid flashing a full-size icon when Frog image generation is not ready yet. */
+const TRANSPARENT_PNG = Uint8Array.from(
+  atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='),
+  (c) => c.charCodeAt(0)
+)
 
 const UrlQuerySchema = z.object({
   url: z.string().url(),
@@ -91,7 +107,6 @@ async function fetchSoundCloudOEmbedArtwork(inputUrlRaw: string): Promise<{
     }
 
     const text = await res.text()
-    console.log('SoundCloud API Response:', text)
     if (!text.trim()) return null
 
     let json: unknown
@@ -144,9 +159,7 @@ function handlePlayerRequest(c: Context) {
   }
 
   const { trackId } = parsedParams.data
-  const origin = new URL(c.req.url).origin
-  const fallbackArtworkSrc = new URL('/icon.png', origin).toString()
-  const artworkSrc = parseArtworkFromQuery(c.req.query('artwork')) ?? fallbackArtworkSrc
+  const artworkSrc = parseArtworkFromQuery(c.req.query('artwork'))
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
     trackId,
     colorHex: theme.primary,
@@ -188,9 +201,24 @@ function handlePlayerRequest(c: Context) {
       }
       .artwork {
         width: min(100%, 360px);
+        height: auto;
+        max-width: 360px;
+        max-height: 360px;
         aspect-ratio: 1 / 1;
         display: block;
         object-fit: cover;
+        border-radius: 12px;
+        background: #1b1b1b;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .artwork.is-ready {
+        opacity: 1;
+      }
+      .artwork-placeholder {
+        width: min(100%, 360px);
+        max-width: 360px;
+        aspect-ratio: 1 / 1;
         border-radius: 12px;
         background: #1b1b1b;
       }
@@ -225,12 +253,20 @@ function handlePlayerRequest(c: Context) {
   <body>
     <main>
       <div class="artwork-wrap">
-        <img
+        ${
+          artworkSrc
+            ? `<img
           class="artwork"
+          width="360"
+          height="360"
           src="${artworkSrc}"
           alt="Track artwork"
-          onerror="this.onerror=null;this.src='${fallbackArtworkSrc}';"
-        />
+          decoding="async"
+          onload="this.classList.add('is-ready')"
+          onerror="this.onerror=null;this.style.visibility='hidden';"
+        />`
+            : '<div class="artwork-placeholder" aria-hidden="true"></div>'
+        }
       </div>
       <iframe
         class="player"
@@ -288,9 +324,10 @@ export const app = new Frog({
 
 // Served at /api/.well-known/farcaster.json; root path handled in api/index.tsx fetch wrapper.
 app.hono.get('/.well-known/farcaster.json', (c) => {
+  const origin = new URL(c.req.url).origin
   c.header('Content-Type', 'application/json')
   c.header('Access-Control-Allow-Origin', '*')
-  return c.json(FARCASTER_MANIFEST)
+  return c.json(buildFarcasterManifest(origin))
 })
 
 // Expose files in /public at the app root.
@@ -301,8 +338,10 @@ app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
 app.hono.use('/frame/image', async (c, next) => {
   const imageParam = c.req.query('image')
   if (!imageParam || !imageParam.trim()) {
-    const origin = new URL(c.req.url).origin
-    return c.redirect(new URL('/icon.png', origin).toString(), 302)
+    return c.body(TRANSPARENT_PNG, 200, {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=60',
+    })
   }
   return next()
 })
@@ -337,7 +376,7 @@ app.frame('/frame', async (c) => {
 
   const renderError = () =>
     c.res({
-      imageOptions: { width: 900, height: 600, embedFont: true },
+      imageOptions: { width: LANDSCAPE_FRAME_WIDTH, height: LANDSCAPE_FRAME_HEIGHT, embedFont: true },
       image: (
         <div
           style={{
@@ -487,49 +526,54 @@ app.frame('/frame', async (c) => {
   }
 
   const { trackId } = parsed
-  const placeholderUrl = new URL('/icon.png', origin).toString()
 
-  let artworkUrl = placeholderUrl
+  let frameArtworkUrl: string | undefined
   try {
     const oEmbed = await fetchSoundCloudOEmbedArtwork(urlRaw)
     if (oEmbed?.thumbnailUrl) {
-      artworkUrl = oEmbed.thumbnailUrl
+      frameArtworkUrl = frameArtworkUrlFromOEmbed(oEmbed.thumbnailUrl)
     }
   } catch {
-    // Fallback to local placeholder if oEmbed fetch fails.
+    // Frame falls back to inline placeholder (no icon.png flash).
   }
 
   // PRD player route is `/player/:trackId` (rewritten to `/api/player/:trackId` in vercel.json).
   // Button.Link opens the webview; Button.action would POST and expect frame JSON (crashes on "Not Found").
   const listenUrl = new URL(`/player/${trackId}`, origin)
-  if (artworkUrl !== placeholderUrl) {
-    listenUrl.searchParams.set('artwork', encodeArtworkQueryParam(artworkUrl))
+  if (frameArtworkUrl) {
+    listenUrl.searchParams.set('artwork', encodeArtworkQueryParam(frameArtworkUrl))
   }
   const listenTarget = listenUrl.toString()
 
   try {
+    // Use the CDN URL directly — skips Frog/Satori PNG generation so the landing
+    // screen does not linger as a large placeholder while /frame/image renders.
+    if (frameArtworkUrl) {
+      return c.res({
+        image: frameArtworkUrl,
+        intents: [<Button.Link href={listenTarget}>▶️ Listen</Button.Link>],
+      })
+    }
+
     return c.res({
-      imageOptions: { width: 900, height: 600, embedFont: false },
+      imageOptions: { ...LANDSCAPE_FRAME_IMAGE_OPTS, embedFont: false },
       image: (
         <div
           style={{
-            background: 'black',
             alignItems: 'center',
+            backgroundColor: theme.background,
             display: 'flex',
-            height: '100%',
+            height: LANDSCAPE_FRAME_HEIGHT,
             justifyContent: 'center',
-            overflow: 'hidden',
-            width: '100%',
+            width: LANDSCAPE_FRAME_WIDTH,
           }}
         >
-          <img
-            alt='SoundFrame artwork'
-            src={artworkUrl}
+          <div
             style={{
-              height: '100%',
-              objectFit: 'contain',
-              objectPosition: 'center',
-              width: '100%',
+              background: '#1b1b1b',
+              borderRadius: 12,
+              height: 200,
+              width: 200,
             }}
           />
         </div>

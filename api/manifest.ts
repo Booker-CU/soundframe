@@ -7,19 +7,30 @@ export const FARCASTER_MANIFEST = {
   frame: {
     version: '1',
     name: 'SoundFrame',
-    iconUrl: 'http://localhost:5173/icon.png',
-    homeUrl: 'http://localhost:5173/player/demo',
-    splashImageUrl: 'http://localhost:5173/icon.png',
     splashBackgroundColor: '#121212',
   },
 } as const
+
+export function buildFarcasterManifest(origin: string) {
+  const base = origin.replace(/\/$/, '')
+  return {
+    ...FARCASTER_MANIFEST,
+    frame: {
+      ...FARCASTER_MANIFEST.frame,
+      iconUrl: `${base}/splash.png`,
+      homeUrl: `${base}/frame`,
+      splashImageUrl: `${base}/splash.png`,
+    },
+  }
+}
 
 export function isFarcasterManifestRequest(request: Request) {
   return new URL(request.url).pathname === '/.well-known/farcaster.json'
 }
 
-export function farcasterManifestResponse() {
-  return new Response(JSON.stringify(FARCASTER_MANIFEST), {
+export function farcasterManifestResponse(request: Request) {
+  const origin = new URL(request.url).origin
+  return new Response(JSON.stringify(buildFarcasterManifest(origin)), {
     headers: {
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',

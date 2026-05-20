@@ -7,9 +7,9 @@
   "frame": {
     "version": "1",
     "name": "SoundFrame",
-    "iconUrl": "http://localhost:5173/icon.png",
-    "homeUrl": "http://localhost:5173/player/demo",
-    "splashImageUrl": "http://localhost:5173/icon.png",
+    "iconUrl": "http://localhost:5173/splash.png",
+    "homeUrl": "http://localhost:5173/frame",
+    "splashImageUrl": "http://localhost:5173/splash.png",
     "splashBackgroundColor": "#121212"
   }
 }

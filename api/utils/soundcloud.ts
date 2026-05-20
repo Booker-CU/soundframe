@@ -231,3 +231,11 @@ export function buildSoundCloudPlayerIframeUrl(params: {
   return `https://w.soundcloud.com/player/?url=${apiTrackUrlParam}&color=${colorParam}`
 }
 
+/** Smaller CDN variant for frame OG rasterization (avoids huge artwork flash). */
+export function frameArtworkUrlFromOEmbed(thumbnailUrl: string): string {
+  return thumbnailUrl
+    .replace(/-t\d+x\d+/gi, '-t200x200')
+    .replace(/-(?:large|original)(?=\.(?:jpg|jpeg|png|webp))/i, '-t200x200')
+}
+
+

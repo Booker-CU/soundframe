@@ -13,7 +13,7 @@ export const config = {
 const frogFetch = app.fetch.bind(app)
 app.fetch = async (request, env, executionCtx) => {
   if (isFarcasterManifestRequest(request)) {
-    return farcasterManifestResponse()
+    return farcasterManifestResponse(request)
   }
   return frogFetch(request, env, executionCtx)
 }
