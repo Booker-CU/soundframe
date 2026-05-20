@@ -18,6 +18,41 @@ const PlayerTrackParamsSchema = z.object({
   trackId: z.string().regex(TRACK_ID_ALPHANUM_RE),
 })
 
+const PlayerArtworkQuerySchema = z.object({
+  artwork: z.string().url().optional(),
+})
+
+/** Base64url so Vite dev does not 404 on `?artwork=https://...` in the request URL. */
+function encodeArtworkQueryParam(artworkUrl: string): string {
+  const bytes = new TextEncoder().encode(artworkUrl)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function decodeArtworkQueryParam(param: string): string | undefined {
+  const trimmed = param.trim()
+  if (!trimmed) return undefined
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  try {
+    const normalized = trimmed.replace(/-/g, '+').replace(/_/g, '/')
+    const padLength = (4 - (normalized.length % 4)) % 4
+    const padded = normalized + '='.repeat(padLength)
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return undefined
+  }
+}
+
+function parseArtworkFromQuery(param: string | undefined): string | undefined {
+  if (!param?.trim()) return undefined
+  const decoded = decodeArtworkQueryParam(param)
+  const parsed = PlayerArtworkQuerySchema.safeParse({ artwork: decoded })
+  return parsed.success ? parsed.data.artwork : undefined
+}
+
 type OEmbedResponse = {
   thumbnail_url?: string
   title?: string
@@ -104,12 +139,14 @@ function handlePlayerRequest(c: Context) {
   }
 
   const { trackId } = parsedParams.data
+  const origin = new URL(c.req.url).origin
+  const fallbackArtworkSrc = new URL('/icon.png', origin).toString()
+  const artworkSrc = parseArtworkFromQuery(c.req.query('artwork')) ?? fallbackArtworkSrc
   const shareText = `Listening on SoundFrame: https://soundcloud.com/tracks/${trackId}`
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
     trackId,
     colorHex: theme.primary,
   })}&auto_play=false`
-  const artworkSrc = `https://i1.sndcdn.com/artworks-${trackId}-t500x500.jpg`
 
   return c.html(`<!doctype html>
 <html lang="en">
@@ -181,7 +218,7 @@ function handlePlayerRequest(c: Context) {
           class="artwork"
           src="${artworkSrc}"
           alt="Track artwork"
-          onerror="this.onerror=null;this.src='/icon.png';"
+          onerror="this.onerror=null;this.src='${fallbackArtworkSrc}';"
         />
       </div>
       <iframe
@@ -438,7 +475,11 @@ app.frame('/frame', async (c) => {
 
   // PRD player route is `/player/:trackId` (rewritten to `/api/player/:trackId` in vercel.json).
   // Button.Link opens the webview; Button.action would POST and expect frame JSON (crashes on "Not Found").
-  const listenTarget = new URL(`/player/${trackId}`, origin).toString()
+  const listenUrl = new URL(`/player/${trackId}`, origin)
+  if (artworkUrl !== placeholderUrl) {
+    listenUrl.searchParams.set('artwork', encodeArtworkQueryParam(artworkUrl))
+  }
+  const listenTarget = listenUrl.toString()
 
   try {
     return c.res({
