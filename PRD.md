@@ -6,13 +6,13 @@ To provide a seamless, high-fidelity music sharing experience within the Farcast
 
     Engine: Hono (Vercel Edge Runtime)
 
-    Framework: Frog.fm (Latest)
+    Framework: Frog.fm + Farcaster Frames v2 (Mini App)
 
     Identity/Signer: Neynar (Managed App Wallet)
 
     Validation: zod (for schema and URL safety)
 
-    SDK: @farcaster/frame-sdk (v2 features)
+    SDK: Farcaster Frames v2 SDK (@farcaster/frame-sdk)
 
 3. Visual Identity & Branding
 
@@ -51,11 +51,17 @@ B. The Feed Frame (/api/frame)
 
     Action: Clicking the button triggers the v2 Webview player.
 
-C. The Player Webview (/player/:trackId)
+C. The Player Mini App Webview (/player/:trackId)
 
-    Logic: An HTML/TSX page serving the SoundCloud widget.
+    Logic: A Farcaster Frames v2 Mini App HTML/TSX page serving the SoundCloud widget.
+
+    Role: Primary media delivery vehicle for playback inside Farcaster.
+
+    Statelessness: Route is stateless; playback state is carried only in URL params (trackId), with no database/session dependency.
 
     Iframe URL: https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/[trackId]&color=%23ff5500.
+
+    Waveform Height: 166px is mandatory for large, scrubbable DJ mix navigation.
 
     UX: Mobile-optimized, viewport-fit=cover, non-scalable.
 
@@ -66,3 +72,11 @@ C. The Player Webview (/player/:trackId)
     Error States: If a link is invalid/private, render a "Track Unavailable" Frame image with a "Retry" button.
 
     Sanitization: Use zod to validate all incoming request bodies.
+
+7. QA Verification
+
+    Verify `sdk.actions.ready()` is present on page load (prevents v2 timeout errors).
+
+    Confirm the SoundCloud iframe is exactly 166px tall (DJ mix navigation requirement).
+
+    Ensure `auto_play=false` in the iframe URL (mobile compliance).
