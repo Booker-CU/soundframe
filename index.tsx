@@ -452,11 +452,6 @@ app.frame('/frame', async (c) => {
       intents: [
         <TextInput placeholder='Paste SoundCloud URL' />,
         <Button action='/frame'>Load Track</Button>,
-        <Button
-          action={`/frame?url=${encodeURIComponent('https://soundcloud.com/forss/flickermood')}`}
-        >
-          Try Demo Track
-        </Button>,
       ],
     })
 
