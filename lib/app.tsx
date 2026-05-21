@@ -3,15 +3,19 @@ import { Button, Frog, TextInput } from 'frog'
 import { serveStatic } from 'frog/serve-static'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { buildFarcasterManifest } from './lib/manifest.js'
+import {
+  buildFarcasterManifest,
+  farcasterManifestResponse,
+  isFarcasterManifestRequest,
+} from './manifest.js'
 import {
   buildSoundCloudPlayerIframeUrl,
   extractSoundCloudUrlFromText,
   frameArtworkUrlFromOEmbed,
   normalizeSoundCloudInputUrl,
   parseSoundCloudUrl,
-} from './lib/utils/soundcloud.js'
-import { theme } from './lib/styles/theme.js'
+} from './utils/soundcloud.js'
+import { theme } from './styles/theme.js'
 
 const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
@@ -382,7 +386,7 @@ export const app = new Frog({
   title: 'SoundFrame',
 })
 
-// Served at /api/.well-known/farcaster.json; root path handled in api/index.tsx fetch wrapper.
+// Served at /api/.well-known/farcaster.json; root path handled in app.fetch wrapper below.
 app.hono.get('/.well-known/farcaster.json', (c) => {
   const origin = new URL(c.req.url).origin
   c.header('Content-Type', 'application/json')
@@ -390,9 +394,11 @@ app.hono.get('/.well-known/farcaster.json', (c) => {
   return c.json(buildFarcasterManifest(origin))
 })
 
-// Expose files in /public at the app root.
-app.hono.use('/*', serveStatic({ root: './public' }))
-app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
+// Dev only: Edge runtime uses Vercel static output instead of Node serve-static.
+if (serveStatic) {
+  app.hono.use('/*', serveStatic({ root: './public' }))
+  app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
+}
 
 // Guard malformed /frame/image requests before Frog parses compressed payload.
 app.hono.use('/frame/image', async (c, next) => {
@@ -409,8 +415,13 @@ app.hono.use('/frame/image', async (c, next) => {
 app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
 app.hono.get('/player/:trackId', handlePlayerRequest)
 
+// Frog mounts routes under basePath `/api`, but Farcaster requires
+// `/.well-known/farcaster.json` at the domain root.
 const frogFetch = app.fetch.bind(app)
 app.fetch = async (request, env, executionCtx) => {
+  if (isFarcasterManifestRequest(request)) {
+    return farcasterManifestResponse(request)
+  }
   const { pathname } = new URL(request.url)
   if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
     return rootHono.fetch(request, env, executionCtx)
