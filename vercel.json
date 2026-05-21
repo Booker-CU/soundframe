@@ -1,9 +1,5 @@
 {
-  "functions": {
-    "api/**/*": {
-      "runtime": "nodejs20.x"
-    }
-  },
+  "outputDirectory": ".vercel/output",
   "rewrites": [
     {
       "source": "/.well-known/farcaster.json",
