@@ -1,4 +1,6 @@
 {
+  "version": 2,
+  "framework": "edge-light",
   "rewrites": [
     {
       "source": "/.well-known/farcaster.json",
