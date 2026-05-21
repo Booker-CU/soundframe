@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsx scripts/bundle-api.ts && frog vercel-build",
+    "build": "tsx scripts/bundle-api.ts",
     "dev": "frog dev server/entry.tsx",
     "deploy": "vercel"
   },

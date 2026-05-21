@@ -3,4 +3,5 @@ node_modules
 .vercel
 
 # Generated for Vercel Edge (see scripts/bundle-api.ts)
+api/index.js
 api/index.tsx
