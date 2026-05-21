@@ -1,5 +1,4 @@
 {
-  "outputDirectory": ".vercel/output",
   "rewrites": [
     {
       "source": "/.well-known/farcaster.json",
