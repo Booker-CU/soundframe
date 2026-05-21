@@ -5,6 +5,10 @@
       "destination": "/api/.well-known/farcaster.json"
     },
     {
+      "source": "/player",
+      "destination": "/api/player"
+    },
+    {
       "source": "/player/:trackId",
       "destination": "/api/player/:trackId"
     }

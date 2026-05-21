@@ -147,7 +147,66 @@ function isValidTrackId(trackId: string) {
   return TRACK_ID_ALPHANUM_RE.test(trackId)
 }
 
+const PLAYER_HOME_PATH = '/player'
 const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
+
+function miniAppShellHtml(body: string) {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
+    />
+    <title>SoundFrame</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #121212;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      main {
+        max-width: 420px;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 0;
+        line-height: 1.5;
+        color: #c8c8c8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>${body}</main>
+    <script type="module">
+      import { sdk } from 'https://cdn.jsdelivr.net/npm/@farcaster/frame-sdk@0.1.14/+esm'
+      await sdk.actions.ready()
+    </script>
+  </body>
+</html>`
+}
+
+function handlePlayerHomeRequest(c: Context) {
+  const framePath = '/api/frame'
+  return c.html(
+    miniAppShellHtml(`
+      <h1>SoundFrame</h1>
+      <p>Paste a SoundCloud link in the <a href="${framePath}" style="color:${theme.primary}">frame</a> to load a track, or open a shared player from a cast.</p>
+    `)
+  )
+}
 
 function handlePlayerRequest(c: Context) {
   const parsedParams = PlayerTrackParamsSchema.safeParse(c.req.param())
@@ -312,6 +371,7 @@ function handlePlayerRequest(c: Context) {
 
 // Root routes (outside Frog basePath `/api`) — matches vercel.json `/player` rewrite in production.
 export const rootHono = new Hono()
+rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
 rootHono.get('/player/:trackId', handlePlayerRequest)
 
 export const app = new Frog({
@@ -346,12 +406,13 @@ app.hono.use('/frame/image', async (c, next) => {
   return next()
 })
 
+app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
 app.hono.get('/player/:trackId', handlePlayerRequest)
 
 const frogFetch = app.fetch.bind(app)
 app.fetch = async (request, env, executionCtx) => {
   const { pathname } = new URL(request.url)
-  if (PLAYER_PATH_RE.test(pathname)) {
+  if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
     return rootHono.fetch(request, env, executionCtx)
   }
   return frogFetch(request, env, executionCtx)
