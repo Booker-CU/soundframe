@@ -1,4 +1,4 @@
-import { parseSoundCloudUrl } from '../api/utils/soundcloud.js'
+import { parseSoundCloudUrl } from '../lib/utils/soundcloud.js'
 
 async function main() {
   const urls = [

@@ -1,6 +1,6 @@
 ---
 description: "Security protocols for URL parsing and player injection"
-globs: ["api/utils/*.ts", "api/index.tsx"]
+globs: ["lib/utils/*.ts", "api/index.tsx"]
 alwaysApply: true
 ---
 # Security Guardrails

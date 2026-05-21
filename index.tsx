@@ -3,15 +3,15 @@ import { Button, Frog, TextInput } from 'frog'
 import { serveStatic } from 'frog/serve-static'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
-import { buildFarcasterManifest } from './api/manifest.js'
+import { buildFarcasterManifest } from './lib/manifest.js'
 import {
   buildSoundCloudPlayerIframeUrl,
   extractSoundCloudUrlFromText,
   frameArtworkUrlFromOEmbed,
   normalizeSoundCloudInputUrl,
   parseSoundCloudUrl,
-} from './api/utils/soundcloud.js'
-import { theme } from './api/styles/theme.js'
+} from './lib/utils/soundcloud.js'
+import { theme } from './lib/styles/theme.js'
 
 const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/

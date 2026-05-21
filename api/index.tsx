@@ -2,7 +2,7 @@ import { handle } from 'frog/next'
 import { app } from '../index.js'
 import { devtools } from 'frog/dev'
 import { serveStatic } from 'frog/serve-static'
-import { farcasterManifestResponse, isFarcasterManifestRequest } from './manifest.js'
+import { farcasterManifestResponse, isFarcasterManifestRequest } from '../lib/manifest.js'
 
 export const config = {
   runtime: 'edge',
