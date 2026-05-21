@@ -1,6 +1,9 @@
 {
-  "version": 2,
-  "framework": null,
+  "functions": {
+    "api/**/*": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "rewrites": [
     {
       "source": "/.well-known/farcaster.json",
