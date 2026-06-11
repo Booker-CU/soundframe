@@ -193,11 +193,9 @@ function miniAppShellHtml(body: string) {
     </style>
   </head>
   <body>
+    <div id="sf-root"></div>
     <main>${body}</main>
-    <script type="module">
-      import { sdk } from 'https://cdn.jsdelivr.net/npm/@farcaster/frame-sdk@0.1.14/+esm'
-      await sdk.actions.ready()
-    </script>
+    <script type="module" src="/client.js"></script>
   </body>
 </html>`
 }
@@ -314,6 +312,7 @@ function handlePlayerRequest(c: Context) {
     </style>
   </head>
   <body>
+    <div id="sf-root"></div>
     <main>
       <div class="artwork-wrap">
         ${
@@ -347,12 +346,7 @@ function handlePlayerRequest(c: Context) {
       >Share</button>
     </main>
 
-    <script type="module">
-      import { sdk } from 'https://cdn.jsdelivr.net/npm/@farcaster/frame-sdk@0.1.14/+esm'
-
-      window.sdk = sdk
-      await sdk.actions.ready()
-    </script>
+    <script type="module" src="/client.js"></script>
     <script>
       const shareBtn = document.getElementById('share-btn');
       if (shareBtn) {
