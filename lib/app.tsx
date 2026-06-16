@@ -154,6 +154,15 @@ function isValidTrackId(trackId: string) {
 const PLAYER_HOME_PATH = '/player'
 const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
 
+/** Runs in <head> so ready() fires before body paint; exposes sdk for share actions. */
+function farcasterReadyScript() {
+  return `<script type="module">
+import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+window.sdk = sdk
+await sdk.actions.ready()
+</script>`
+}
+
 function miniAppShellHtml(body: string) {
   return `<!doctype html>
 <html lang="en">
@@ -164,6 +173,7 @@ function miniAppShellHtml(body: string) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
+    ${farcasterReadyScript()}
     <style>
       :root { color-scheme: dark; }
       body {
@@ -193,9 +203,7 @@ function miniAppShellHtml(body: string) {
     </style>
   </head>
   <body>
-    <div id="sf-root"></div>
     <main>${body}</main>
-    <script type="module" src="/client.js"></script>
   </body>
 </html>`
 }
@@ -235,6 +243,7 @@ function handlePlayerRequest(c: Context) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame Player</title>
+    ${farcasterReadyScript()}
     <style>
       :root {
         color-scheme: dark;
@@ -312,7 +321,6 @@ function handlePlayerRequest(c: Context) {
     </style>
   </head>
   <body>
-    <div id="sf-root"></div>
     <main>
       <div class="artwork-wrap">
         ${
@@ -346,7 +354,6 @@ function handlePlayerRequest(c: Context) {
       >Share</button>
     </main>
 
-    <script type="module" src="/client.js"></script>
     <script>
       const shareBtn = document.getElementById('share-btn');
       if (shareBtn) {
