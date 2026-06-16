@@ -38,7 +38,7 @@ function buildMiniAppEmbed(origin: string) {
  * Output API) with stub `.func` dirs missing `.vc-config.json`, which breaks deploy.
  */
 rmSync('.vercel/output', { recursive: true, force: true })
-rmSync('api/index.js', { force: true })
+rmSync('api/[[...path]].js', { force: true })
 rmSync('api/player', { recursive: true, force: true })
 
 const origin = deploymentOrigin()
@@ -63,9 +63,9 @@ writeFileSync('public/player.html', playerHtml)
 
 await esbuild.build({
   entryPoints: ['server/entry.prod.tsx'],
-  outfile: 'api/[[...path]].js',
+  outfile: 'api/index.js',
   bundle: true,
-  platform: 'browser',
+  platform: 'node',
   format: 'esm',
   packages: 'external',
   jsx: 'automatic',
