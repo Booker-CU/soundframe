@@ -1,7 +1,4 @@
 import { app } from '../lib/app.js'
 
-export const config = {
-  runtime: 'edge',
-}
-
+// Frog depends on @vercel/og WASM — Node.js runtime, not Edge.
 export default (request: Request) => app.fetch(request)

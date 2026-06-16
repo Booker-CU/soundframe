@@ -1,7 +1,7 @@
 // lib/app.tsx
 import { Button, Frog, TextInput } from "frog";
 import { Hono } from "hono";
-import { z as z2 } from "zod";
+import { z as z3 } from "zod";
 
 // lib/manifest.ts
 var FARCASTER_ACCOUNT_ASSOCIATION_STUB = {
@@ -199,36 +199,15 @@ var theme = {
   background: BACKGROUND_COLOR_HEX
 };
 
-// lib/app.tsx
-import { jsx, jsxs } from "frog/jsx/jsx-runtime";
-var SOUND_CLOUD_ALLOWED_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
+// lib/player-pages.ts
+import { z as z2 } from "zod";
 var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
-var LANDSCAPE_FRAME_WIDTH = 900;
-var LANDSCAPE_FRAME_HEIGHT = 600;
-var LANDSCAPE_FRAME_IMAGE_OPTS = {
-  width: LANDSCAPE_FRAME_WIDTH,
-  height: LANDSCAPE_FRAME_HEIGHT,
-  embedFont: false
-};
-var TRANSPARENT_PNG = Uint8Array.from(
-  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="),
-  (c) => c.charCodeAt(0)
-);
-var UrlQuerySchema = z2.object({
-  url: z2.string().url()
-});
 var PlayerTrackParamsSchema = z2.object({
   trackId: z2.string().regex(TRACK_ID_ALPHANUM_RE2)
 });
 var PlayerArtworkQuerySchema = z2.object({
   artwork: z2.string().url().optional()
 });
-function encodeArtworkQueryParam(artworkUrl) {
-  const bytes = new TextEncoder().encode(artworkUrl);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
 function decodeArtworkQueryParam(param) {
   const trimmed = param.trim();
   if (!trimmed) return void 0;
@@ -250,57 +229,12 @@ function parseArtworkFromQuery(param) {
   const parsed = PlayerArtworkQuerySchema.safeParse({ artwork: decoded });
   return parsed.success ? parsed.data.artwork : void 0;
 }
-async function fetchSoundCloudOEmbedArtwork(inputUrlRaw) {
-  const inputUrl = new URL(inputUrlRaw);
-  if (!SOUND_CLOUD_ALLOWED_HOSTS.has(inputUrl.hostname)) {
-    throw new Error("Invalid SoundCloud hostname.");
-  }
-  const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlRaw)}&format=json`;
-  try {
-    const res = await fetch(oEmbedUrl, {
-      method: "GET",
-      headers: {
-        accept: "application/json"
-      }
-    });
-    if (!res.ok) {
-      console.warn("SoundCloud oEmbed request failed:", res.status, res.statusText);
-      return null;
-    }
-    const text = await res.text();
-    if (!text.trim()) return null;
-    let json;
-    try {
-      json = JSON.parse(text);
-    } catch (parseErr) {
-      console.warn(
-        "SoundCloud oEmbed returned non-JSON body:",
-        text.slice(0, 120),
-        parseErr instanceof Error ? parseErr.message : parseErr
-      );
-      return null;
-    }
-    const parsed = z2.object({
-      thumbnail_url: z2.string().url().optional(),
-      title: z2.string().optional(),
-      author_name: z2.string().optional()
-    }).catchall(z2.unknown()).safeParse(json);
-    if (!parsed.success) return null;
-    const data = parsed.data;
-    return {
-      thumbnailUrl: typeof data.thumbnail_url === "string" ? data.thumbnail_url : void 0,
-      title: typeof data.title === "string" ? data.title : void 0,
-      authorName: typeof data.author_name === "string" ? data.author_name : void 0
-    };
-  } catch {
-    return null;
-  }
+function htmlResponse(html, status = 200) {
+  return new Response(html, {
+    status,
+    headers: { "Content-Type": "text/html; charset=utf-8" }
+  });
 }
-function isValidTrackId(trackId) {
-  return TRACK_ID_ALPHANUM_RE2.test(trackId);
-}
-var PLAYER_HOME_PATH = "/player";
-var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
 function farcasterReadyScript() {
   return `<script type="module">
 import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
@@ -352,30 +286,32 @@ function miniAppShellHtml(body) {
   </body>
 </html>`;
 }
-function handlePlayerHomeRequest(c) {
+function playerHomeResponse() {
   const framePath = "/api/frame";
-  return c.html(
+  return htmlResponse(
     miniAppShellHtml(`
       <h1>SoundFrame</h1>
       <p>Paste a SoundCloud link in the <a href="${framePath}" style="color:${theme.primary}">frame</a> to load a track, or open a shared player from a cast.</p>
     `)
   );
 }
-function handlePlayerRequest(c) {
-  const parsedParams = PlayerTrackParamsSchema.safeParse(c.req.param());
+function playerTrackNotFoundResponse() {
+  return htmlResponse(
+    `<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" /><title>SoundFrame</title></head><body style="margin:0;background:#121212;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">Track unavailable.</body></html>`,
+    400
+  );
+}
+function playerTrackResponse(trackId, artworkQuery) {
+  const parsedParams = PlayerTrackParamsSchema.safeParse({ trackId });
   if (!parsedParams.success) {
-    return c.html(
-      `<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" /><title>SoundFrame</title></head><body style="margin:0;background:#121212;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;">Track unavailable.</body></html>`,
-      400
-    );
+    return playerTrackNotFoundResponse();
   }
-  const { trackId } = parsedParams.data;
-  const artworkSrc = parseArtworkFromQuery(c.req.query("artwork"));
+  const artworkSrc = parseArtworkFromQuery(artworkQuery);
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
-    trackId,
+    trackId: parsedParams.data.trackId,
     colorHex: theme.primary
   })}&auto_play=false`;
-  return c.html(`<!doctype html>
+  return htmlResponse(`<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -509,6 +445,92 @@ function handlePlayerRequest(c) {
     <\/script>
   </body>
 </html>`);
+}
+
+// lib/app.tsx
+import { jsx, jsxs } from "frog/jsx/jsx-runtime";
+var SOUND_CLOUD_ALLOWED_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
+var TRACK_ID_ALPHANUM_RE3 = /^[A-Za-z0-9]+$/;
+var LANDSCAPE_FRAME_WIDTH = 900;
+var LANDSCAPE_FRAME_HEIGHT = 600;
+var LANDSCAPE_FRAME_IMAGE_OPTS = {
+  width: LANDSCAPE_FRAME_WIDTH,
+  height: LANDSCAPE_FRAME_HEIGHT,
+  embedFont: false
+};
+var TRANSPARENT_PNG = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="),
+  (c) => c.charCodeAt(0)
+);
+var UrlQuerySchema = z3.object({
+  url: z3.string().url()
+});
+function encodeArtworkQueryParam(artworkUrl) {
+  const bytes = new TextEncoder().encode(artworkUrl);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+async function fetchSoundCloudOEmbedArtwork(inputUrlRaw) {
+  const inputUrl = new URL(inputUrlRaw);
+  if (!SOUND_CLOUD_ALLOWED_HOSTS.has(inputUrl.hostname)) {
+    throw new Error("Invalid SoundCloud hostname.");
+  }
+  const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlRaw)}&format=json`;
+  try {
+    const res = await fetch(oEmbedUrl, {
+      method: "GET",
+      headers: {
+        accept: "application/json"
+      }
+    });
+    if (!res.ok) {
+      console.warn("SoundCloud oEmbed request failed:", res.status, res.statusText);
+      return null;
+    }
+    const text = await res.text();
+    if (!text.trim()) return null;
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch (parseErr) {
+      console.warn(
+        "SoundCloud oEmbed returned non-JSON body:",
+        text.slice(0, 120),
+        parseErr instanceof Error ? parseErr.message : parseErr
+      );
+      return null;
+    }
+    const parsed = z3.object({
+      thumbnail_url: z3.string().url().optional(),
+      title: z3.string().optional(),
+      author_name: z3.string().optional()
+    }).catchall(z3.unknown()).safeParse(json);
+    if (!parsed.success) return null;
+    const data = parsed.data;
+    return {
+      thumbnailUrl: typeof data.thumbnail_url === "string" ? data.thumbnail_url : void 0,
+      title: typeof data.title === "string" ? data.title : void 0,
+      authorName: typeof data.author_name === "string" ? data.author_name : void 0
+    };
+  } catch {
+    return null;
+  }
+}
+function isValidTrackId(trackId) {
+  return TRACK_ID_ALPHANUM_RE3.test(trackId);
+}
+var PLAYER_HOME_PATH = "/player";
+var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
+function handlePlayerHomeRequest(c) {
+  return playerHomeResponse();
+}
+function handlePlayerRequest(c) {
+  const trackId = c.req.param("trackId");
+  if (!trackId) {
+    return playerTrackNotFoundResponse();
+  }
+  return playerTrackResponse(trackId, c.req.query("artwork"));
 }
 var rootHono = new Hono();
 rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest);
@@ -770,11 +792,7 @@ app.frame("/frame", async (c) => {
 });
 
 // server/entry.prod.tsx
-var config = {
-  runtime: "edge"
-};
 var entry_prod_default = (request) => app.fetch(request);
 export {
-  config,
   entry_prod_default as default
 };
