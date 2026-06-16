@@ -66146,8 +66146,15 @@ app.frame("/frame", async (c3) => {
 });
 
 // server/entry.prod.tsx
-var entry_prod_default = (request) => app.fetch(request);
+function handle(request) {
+  return app.fetch(request);
+}
+var entry_prod_default = { fetch: handle };
+var GET = handle;
+var POST = handle;
 export {
+  GET,
+  POST,
   entry_prod_default as default
 };
 /*! Bundled license information:
