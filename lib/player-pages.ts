@@ -97,11 +97,10 @@ function miniAppShellHtml(body: string) {
 }
 
 export function playerHomeResponse() {
-  const framePath = '/api/frame'
   return htmlResponse(
     miniAppShellHtml(`
       <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link in the <a href="${framePath}" style="color:${theme.primary}">frame</a> to load a track, or open a shared player from a cast.</p>
+      <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
     `)
   )
 }

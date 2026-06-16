@@ -118,6 +118,21 @@
       .hidden {
         display: none;
       }
+      .frame-url-label {
+        margin-top: 16px;
+        font-size: 0.9rem;
+      }
+      .frame-url {
+        display: block;
+        margin: 8px 0 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #1b1b1b;
+        color: #e8e8e8;
+        font-size: 0.8rem;
+        word-break: break-all;
+        text-align: left;
+      }
     </style>
   </head>
   <body>
@@ -167,9 +182,24 @@
       function renderHome(app) {
         document.body.className = 'layout-home'
         document.title = 'SoundFrame'
+        const frameUrl = window.location.origin + '/frame'
         app.innerHTML =
           '<h1>SoundFrame</h1>' +
-          '<p>Paste a SoundCloud link in the <a href="/api/frame">frame</a> to load a track, or open a shared player from a cast.</p>'
+          '<p>Open a shared player from a cast, or test the frame in Warpcast Developer Tools.</p>' +
+          '<p class="frame-url-label">Frame URL (paste in the <strong>Frame</strong> tab, not the mini app URL):</p>' +
+          '<code class="frame-url">' + frameUrl + '</code>' +
+          '<button id="copy-frame-url" class="share" type="button">Copy frame URL</button>'
+        const copyBtn = document.getElementById('copy-frame-url')
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(frameUrl)
+              copyBtn.textContent = 'Copied!'
+            } catch {
+              copyBtn.textContent = frameUrl
+            }
+          })
+        }
       }
 
       function renderTrack(app, trackId) {
