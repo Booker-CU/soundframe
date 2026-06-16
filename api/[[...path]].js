@@ -1,6 +1,5 @@
 // lib/app.tsx
 import { Button, Frog, TextInput } from "frog";
-import { serveStatic } from "frog/serve-static";
 import { Hono } from "hono";
 import { z as z2 } from "zod";
 
@@ -527,10 +526,6 @@ app.hono.get("/.well-known/farcaster.json", (c) => {
   c.header("Access-Control-Allow-Origin", "*");
   return c.json(buildFarcasterManifest(origin));
 });
-if (serveStatic) {
-  app.hono.use("/*", serveStatic({ root: "./public" }));
-  app.hono.use("/icon.png", serveStatic({ path: "./public/icon.png" }));
-}
 app.hono.use("/frame/image", async (c, next) => {
   const imageParam = c.req.query("image");
   if (!imageParam || !imageParam.trim()) {
@@ -778,7 +773,7 @@ app.frame("/frame", async (c) => {
 var config = {
   runtime: "edge"
 };
-var entry_prod_default = app.fetch.bind(app);
+var entry_prod_default = (request) => app.fetch(request);
 export {
   config,
   entry_prod_default as default

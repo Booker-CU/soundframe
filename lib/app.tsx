@@ -1,6 +1,5 @@
 import { Button, Frog, TextInput } from 'frog'
 // import { neynar } from 'frog/hubs'
-import { serveStatic } from 'frog/serve-static'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import {
@@ -394,12 +393,6 @@ app.hono.get('/.well-known/farcaster.json', (c) => {
   c.header('Access-Control-Allow-Origin', '*')
   return c.json(buildFarcasterManifest(origin))
 })
-
-// Dev only: Edge runtime uses Vercel static output instead of Node serve-static.
-if (serveStatic) {
-  app.hono.use('/*', serveStatic({ root: './public' }))
-  app.hono.use('/icon.png', serveStatic({ path: './public/icon.png' }))
-}
 
 // Guard malformed /frame/image requests before Frog parses compressed payload.
 app.hono.use('/frame/image', async (c, next) => {

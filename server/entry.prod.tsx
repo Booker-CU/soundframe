@@ -4,4 +4,4 @@ export const config = {
   runtime: 'edge',
 }
 
-export default app.fetch.bind(app)
+export default (request: Request) => app.fetch(request)

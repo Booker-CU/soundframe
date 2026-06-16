@@ -6,3 +6,4 @@ node_modules
 api/index.js
 api/index.tsx
 api/[[...path]].js
+public/.well-known/farcaster.json

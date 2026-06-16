@@ -3,10 +3,6 @@
   "framework": null,
   "rewrites": [
     {
-      "source": "/.well-known/farcaster.json",
-      "destination": "/api/.well-known/farcaster.json"
-    },
-    {
       "source": "/player",
       "destination": "/api/player"
     },
