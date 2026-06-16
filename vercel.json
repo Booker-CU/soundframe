@@ -1,6 +1,13 @@
 {
   "buildCommand": "npm run build",
   "framework": null,
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/player",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
