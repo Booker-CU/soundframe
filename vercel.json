@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/player",
-      "destination": "/api/player"
+      "destination": "/player.html"
     },
     {
       "source": "/player/:trackId",
-      "destination": "/api/player/:trackId"
+      "destination": "/player.html"
     }
   ]
 }
