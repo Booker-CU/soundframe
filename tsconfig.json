@@ -19,5 +19,5 @@
     "types": ["frog/client"]
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.mtsx"],
-  "exclude": ["api/index.js", "api/index.tsx"]
+  "exclude": ["api/index.js", "api/index.tsx", "api/[[...path]].js"]
 }

@@ -30,16 +30,11 @@ function buildMiniAppEmbed(origin: string) {
 }
 
 /**
- * Vercel Edge Functions cannot import modules outside `api/` (e.g. `../lib/*`).
- * Bundle Frog frame routes into `api/[[...path]].js`.
- * `/player` is served as static `public/player.html` (see vercel.json rewrites).
- *
- * Do not run `frog vercel-build`: it writes `.vercel/output/config.json` (Build
- * Output API) with stub `.func` dirs missing `.vc-config.json`, which breaks deploy.
+ * Bundle Frog into `api/[[...path]].js` — must be committed (Vercel ignores gitignored api files).
+ * `/player` is static `public/player.html` (see vercel.json rewrites).
  */
 rmSync('.vercel/output', { recursive: true, force: true })
-rmSync('api/[[...path]].js', { force: true })
-rmSync('api/player', { recursive: true, force: true })
+rmSync('api/index.js', { force: true })
 
 const origin = deploymentOrigin()
 const embedJson = JSON.stringify(buildMiniAppEmbed(origin))
@@ -63,7 +58,7 @@ writeFileSync('public/player.html', playerHtml)
 
 await esbuild.build({
   entryPoints: ['server/entry.prod.tsx'],
-  outfile: 'api/index.js',
+  outfile: 'api/[[...path]].js',
   bundle: true,
   platform: 'node',
   format: 'esm',
