@@ -13,10 +13,6 @@
     {
       "source": "/player/:trackId",
       "destination": "/api/player/:trackId"
-    },
-    {
-      "source": "/api/:path*",
-      "destination": "/api"
     }
   ]
 }

@@ -10,10 +10,10 @@ import { rmSync } from 'node:fs'
  * Output API) with stub `.func` dirs missing `.vc-config.json`, which breaks deploy.
  */
 rmSync('.vercel/output', { recursive: true, force: true })
-rmSync('api/[[...path]].js', { force: true })
+rmSync('api/index.js', { force: true })
 await esbuild.build({
   entryPoints: ['server/entry.prod.tsx'],
-  outfile: 'api/index.js',
+  outfile: 'api/[[...path]].js',
   bundle: true,
   platform: 'browser',
   format: 'esm',
