@@ -7,3 +7,5 @@ api/index.js
 api/index.tsx
 api/[[...path]].js
 public/.well-known/farcaster.json
+public/miniapp-sdk.js
+public/player.html
