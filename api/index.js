@@ -66146,8 +66146,22 @@ app.frame("/frame", async (c3) => {
 });
 
 // server/entry.prod.tsx
-function handle(request) {
-  return app.fetch(request);
+function normalizeRequestUrl(request) {
+  const url2 = new URL(request.url);
+  if (url2.pathname === "/frame" || url2.pathname.startsWith("/frame/")) {
+    url2.pathname = `/api${url2.pathname}`;
+    return new Request(url2, request);
+  }
+  return request;
+}
+async function handle(request) {
+  try {
+    return await app.fetch(normalizeRequestUrl(request));
+  } catch (err2) {
+    console.error("SoundFrame handler error:", err2);
+    const message2 = err2 instanceof Error ? err2.stack ?? err2.message : String(err2);
+    return new Response(message2, { status: 500, headers: { "Content-Type": "text/plain" } });
+  }
 }
 var entry_prod_default = { fetch: handle };
 var GET = handle;

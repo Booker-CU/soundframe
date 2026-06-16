@@ -3,8 +3,16 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "/api"
+    },
+    {
       "source": "/frame",
       "destination": "/api/frame"
+    },
+    {
+      "source": "/frame/:path*",
+      "destination": "/api/frame/:path*"
     },
     {
       "source": "/player",

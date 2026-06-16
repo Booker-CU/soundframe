@@ -30,11 +30,15 @@ function buildMiniAppEmbed(origin: string) {
 }
 
 /**
- * Bundle Frog into `api/[[...path]].js` (fully bundled for Vercel — no external imports).
+ * Bundle Frog into `api/index.js` for Vercel Node.
  * `/player` is static `public/player.html` (see vercel.json rewrites).
+ * All `/api/*` paths are rewritten to `/api` — catch-all `[[...path]].js` is Next.js-only.
  */
 rmSync('.vercel/output', { recursive: true, force: true })
 rmSync('api/index.js', { force: true })
+rmSync('api/[[...path]].js', { force: true })
+rmSync('api/frame.js', { force: true })
+rmSync('api/frame/image.js', { force: true })
 
 const origin = deploymentOrigin()
 const embedJson = JSON.stringify(buildMiniAppEmbed(origin))
@@ -58,7 +62,7 @@ writeFileSync('public/player.html', playerHtml)
 
 await esbuild.build({
   entryPoints: ['server/entry.prod.tsx'],
-  outfile: 'api/[[...path]].js',
+  outfile: 'api/index.js',
   bundle: true,
   platform: 'node',
   format: 'esm',
@@ -66,3 +70,12 @@ await esbuild.build({
   jsxImportSource: 'frog/jsx',
   logLevel: 'info',
 })
+
+// @vercel/og reads these from import.meta.url next to the bundled output.
+for (const asset of ['noto-sans-v27-latin-regular.ttf', 'yoga.wasm', 'resvg.wasm']) {
+  copyFileSync(`node_modules/@vercel/og/dist/${asset}`, `api/${asset}`)
+}
+
+writeFileSync('api/frame.js', "export { default, GET, POST } from './index.js'\n")
+mkdirSync('api/frame', { recursive: true })
+writeFileSync('api/frame/image.js', "export { default, GET, POST } from '../index.js'\n")

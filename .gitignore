@@ -3,7 +3,6 @@ node_modules
 .vercel
 
 # Generated at build time (see scripts/bundle-api.ts)
-api/index.js
 api/index.tsx
 public/.well-known/farcaster.json
 public/miniapp-sdk.js
