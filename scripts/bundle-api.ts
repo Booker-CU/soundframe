@@ -30,7 +30,7 @@ function buildMiniAppEmbed(origin: string) {
 }
 
 /**
- * Bundle Frog into `api/[[...path]].js` — must be committed (Vercel ignores gitignored api files).
+ * Bundle Frog into `api/[[...path]].js` (fully bundled for Vercel — no external imports).
  * `/player` is static `public/player.html` (see vercel.json rewrites).
  */
 rmSync('.vercel/output', { recursive: true, force: true })
@@ -62,7 +62,6 @@ await esbuild.build({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  packages: 'external',
   jsx: 'automatic',
   jsxImportSource: 'frog/jsx',
   logLevel: 'info',
