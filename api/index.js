@@ -65457,7 +65457,7 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track", actio
 }
 var EMBED_IMAGE_URL_MAX_LENGTH = 1024;
 function embedFallbackImageUrl(origin) {
-  return `${origin.replace(/\/$/, "")}/embed-card`;
+  return `${origin.replace(/\/$/, "")}/embed-card.png`;
 }
 function isValidEmbedImageUrl(imageUrl) {
   return imageUrl.length > 0 && imageUrl.length <= EMBED_IMAGE_URL_MAX_LENGTH;
@@ -65489,10 +65489,7 @@ function resolveFrameEmbedButtonTitle(html2) {
   return readMetaContent(html2, "property", "fc:frame:button:1") ?? "Load Track";
 }
 function embedFramePageMetaTags(origin, imageUrl, buttonTitle) {
-  const miniappEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_miniapp");
-  const legacyEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_frame");
-  return `${embedMiniappMetaTag(miniappEmbed)}
-    <meta name="fc:frame" content='${serializeEmbedForMetaTag(legacyEmbed)}' />`;
+  return embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_frame"));
 }
 function injectFrameEmbedMeta(html2, origin) {
   if (html2.includes('name="fc:miniapp"')) return html2;

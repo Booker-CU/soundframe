@@ -18,10 +18,6 @@
       "destination": "/api/.well-known/farcaster.json"
     },
     {
-      "source": "/embed-card",
-      "destination": "/api/embed-card"
-    },
-    {
       "source": "/frame",
       "destination": "/api/frame"
     },

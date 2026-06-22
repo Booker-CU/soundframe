@@ -7,3 +7,4 @@ api/index.tsx
 public/.well-known/farcaster.json
 public/miniapp-sdk.js
 public/player.html
+public/embed-card.png

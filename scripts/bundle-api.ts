@@ -64,6 +64,10 @@ for (const asset of ['noto-sans-v27-latin-regular.ttf', 'yoga.wasm', 'resvg.wasm
   copyFileSync(`node_modules/@vercel/og/dist/${asset}`, `api/${asset}`)
 }
 
+const { embedCardImageResponse } = await import('../lib/embed-card.tsx')
+const embedCardPng = Buffer.from(await (await embedCardImageResponse()).arrayBuffer())
+writeFileSync('public/embed-card.png', embedCardPng)
+
 writeFileSync('api/frame.js', "export { default, GET, POST } from './index.js'\n")
 mkdirSync('api/frame', { recursive: true })
 writeFileSync('api/frame/image.js', "export { default, GET, POST } from '../index.js'\n")

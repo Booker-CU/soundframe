@@ -88,9 +88,9 @@ export function buildFramePageEmbed(
 /** Max length enforced by Farcaster Mini App embed spec for `imageUrl`. */
 const EMBED_IMAGE_URL_MAX_LENGTH = 1024
 
-/** Stable 3:2 embed art for /frame (short URL; splash.png is 1:1). */
+/** Stable 3:2 embed art for /frame — static `public/embed-card.png` (see bundle-api.ts). */
 export function embedFallbackImageUrl(origin: string): string {
-  return `${origin.replace(/\/$/, '')}/embed-card`
+  return `${origin.replace(/\/$/, '')}/embed-card.png`
 }
 
 export function isValidEmbedImageUrl(imageUrl: string): boolean {
@@ -134,9 +134,8 @@ export function embedFramePageMetaTags(
   imageUrl: string,
   buttonTitle: string
 ): string {
-  const miniappEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, 'launch_miniapp')
-  const legacyEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, 'launch_frame')
-  return `${embedMiniappMetaTag(miniappEmbed)}\n    <meta name="fc:frame" content='${serializeEmbedForMetaTag(legacyEmbed)}' />`
+  // Match /player embed shape (launch_frame on both tags) — known working in Warpcast preview.
+  return embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle, 'launch_frame'))
 }
 
 export function injectFrameEmbedMeta(html: string, origin: string): string {
