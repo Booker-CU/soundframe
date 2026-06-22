@@ -15,14 +15,17 @@ function deploymentOrigin() {
 
 /**
  * Bundle Frog into `api/index.js` for Vercel Node.
- * `/player` is static `public/player.html` (see vercel.json rewrites).
- * All `/api/*` paths are rewritten to `/api` — catch-all `[[...path]].js` is Next.js-only.
+ * `/player` and `/frame` rewrite to `/api/player` and `/api/frame` (see vercel.json).
+ * Stub entry files under `api/` map each path to the shared handler.
+ * All other `/api/*` paths fall through to `/api` via vercel.json.
  */
 rmSync('.vercel/output', { recursive: true, force: true })
 rmSync('api/index.js', { force: true })
 rmSync('api/[[...path]].js', { force: true })
 rmSync('api/frame.js', { force: true })
 rmSync('api/frame/image.js', { force: true })
+rmSync('api/player.js', { force: true })
+rmSync('api/player/[trackId].js', { force: true })
 
 const origin = deploymentOrigin()
 const embedJson = serializeEmbedForMetaTag(buildPlayerHomeEmbed(origin))
@@ -63,3 +66,13 @@ for (const asset of ['noto-sans-v27-latin-regular.ttf', 'yoga.wasm', 'resvg.wasm
 writeFileSync('api/frame.js', "export { default, GET, POST } from './index.js'\n")
 mkdirSync('api/frame', { recursive: true })
 writeFileSync('api/frame/image.js', "export { default, GET, POST } from '../index.js'\n")
+
+mkdirSync('api/player', { recursive: true })
+writeFileSync('api/player.js', "export { default, GET, POST } from './index.js'\n")
+writeFileSync('api/player/[trackId].js', "export { default, GET, POST } from '../index.js'\n")
+
+mkdirSync('api/.well-known', { recursive: true })
+writeFileSync(
+  'api/.well-known/farcaster.json.js',
+  "export { default, GET, POST } from '../index.js'\n"
+)

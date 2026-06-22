@@ -65361,10 +65361,10 @@ function date4(params) {
 config(en_default());
 
 // lib/manifest.ts
-var FARCASTER_ACCOUNT_ASSOCIATION_STUB = {
-  header: "eyJhbGciOiJFUzI1NksifQ",
-  payload: "eyJkb21haW4iOiJZT1VSX0RPTUFJTiJ9",
-  signature: "REPLACE_WITH_SIGNED_ACCOUNT_ASSOCIATION"
+var FARCASTER_ACCOUNT_ASSOCIATION = {
+  header: "eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ",
+  payload: "eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ",
+  signature: "i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw="
 };
 var FARCASTER_MINIAPP_CONFIG = {
   version: "1",
@@ -65384,7 +65384,7 @@ function buildFarcasterManifest(origin) {
     splashImageUrl: `${base}/splash.png`
   };
   return {
-    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION_STUB,
+    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
     miniapp,
     frame: miniapp
   };
@@ -65985,6 +65985,8 @@ function isValidTrackId(trackId) {
 }
 var PLAYER_HOME_PATH = "/player";
 var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
+var API_PLAYER_HOME_PATH = "/api/player";
+var API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/;
 var FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/;
 function handlePlayerHomeRequest(c3) {
   return playerHomeResponse();
@@ -66030,7 +66032,10 @@ app.fetch = async (request, env, executionCtx) => {
     return farcasterManifestResponse(request);
   }
   const { pathname } = new URL(request.url);
-  if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
+  if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname) || pathname === API_PLAYER_HOME_PATH || API_PLAYER_PATH_RE.test(pathname)) {
+    if (pathname.startsWith("/api/")) {
+      return handlePlayerRequest(request);
+    }
     return rootHono.fetch(request, env, executionCtx);
   }
   const response = await frogFetch(request, env, executionCtx);
@@ -66266,7 +66271,7 @@ app.frame("/frame", async (c3) => {
 // server/entry.prod.tsx
 function normalizeRequestUrl(request) {
   const url2 = new URL(request.url);
-  if (url2.pathname === "/frame" || url2.pathname.startsWith("/frame/")) {
+  if (url2.pathname === "/frame" || url2.pathname.startsWith("/frame/") || url2.pathname === "/player" || url2.pathname.startsWith("/player/")) {
     url2.pathname = `/api${url2.pathname}`;
     return new Request(url2, request);
   }

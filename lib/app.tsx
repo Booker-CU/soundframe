@@ -16,6 +16,7 @@ import {
 } from './utils/soundcloud.js'
 import { theme } from './styles/theme.js'
 import {
+  handlePlayerRequest,
   playerHomeResponse,
   playerTrackNotFoundResponse,
   playerTrackResponse,
@@ -126,6 +127,8 @@ function isValidTrackId(trackId: string) {
 
 const PLAYER_HOME_PATH = '/player'
 const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
+const API_PLAYER_HOME_PATH = '/api/player'
+const API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/
 const FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/
 
 function handlePlayerHomeRequest(c: Context) {
@@ -140,7 +143,7 @@ function handlePlayerRequest(c: Context) {
   return playerTrackResponse(trackId, c.req.query('artwork'))
 }
 
-// Root routes (outside Frog basePath `/api`) — matches vercel.json `/player` rewrite in production.
+// Root routes (outside Frog basePath `/api`) — used when pathname is `/player` before normalization.
 export const rootHono = new Hono()
 rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
 rootHono.get('/player/:trackId', handlePlayerRequest)
@@ -184,7 +187,15 @@ app.fetch = async (request, env, executionCtx) => {
     return farcasterManifestResponse(request)
   }
   const { pathname } = new URL(request.url)
-  if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
+  if (
+    pathname === PLAYER_HOME_PATH ||
+    PLAYER_PATH_RE.test(pathname) ||
+    pathname === API_PLAYER_HOME_PATH ||
+    API_PLAYER_PATH_RE.test(pathname)
+  ) {
+    if (pathname.startsWith('/api/')) {
+      return handlePlayerRequest(request)
+    }
     return rootHono.fetch(request, env, executionCtx)
   }
   const response = await frogFetch(request, env, executionCtx)

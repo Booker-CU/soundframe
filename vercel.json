@@ -14,6 +14,10 @@
       "destination": "/api"
     },
     {
+      "source": "/.well-known/farcaster.json",
+      "destination": "/api/.well-known/farcaster.json"
+    },
+    {
       "source": "/frame",
       "destination": "/api/frame"
     },
@@ -23,11 +27,11 @@
     },
     {
       "source": "/player",
-      "destination": "/player.html"
+      "destination": "/api/player"
     },
     {
       "source": "/player/:trackId",
-      "destination": "/player.html"
+      "destination": "/api/player/:trackId"
     }
   ]
 }

@@ -2,7 +2,12 @@ import { app } from '../lib/app.js'
 
 function normalizeRequestUrl(request: Request): Request {
   const url = new URL(request.url)
-  if (url.pathname === '/frame' || url.pathname.startsWith('/frame/')) {
+  if (
+    url.pathname === '/frame' ||
+    url.pathname.startsWith('/frame/') ||
+    url.pathname === '/player' ||
+    url.pathname.startsWith('/player/')
+  ) {
     url.pathname = `/api${url.pathname}`
     return new Request(url, request)
   }
