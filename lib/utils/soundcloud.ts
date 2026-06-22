@@ -238,4 +238,39 @@ export function frameArtworkUrlFromOEmbed(thumbnailUrl: string): string {
     .replace(/-(?:large|original)(?=\.(?:jpg|jpeg|png|webp))/i, '-t200x200')
 }
 
+const OEmbedThumbnailSchema = z.object({
+  thumbnail_url: z.string().url().optional(),
+})
+
+/**
+ * Resolve track artwork via SoundCloud oEmbed when the player URL has no `?artwork=`.
+ */
+export async function fetchTrackThumbnailUrl(trackId: string): Promise<string | undefined> {
+  try {
+    const id = TrackIdSchema.parse(trackId)
+    const trackApiUrl = `https://api.soundcloud.com/tracks/${id}`
+    const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(trackApiUrl)}&format=json`
+    const res = await fetch(oEmbedUrl, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+    })
+    if (!res.ok) return undefined
+
+    const text = await res.text()
+    if (!text.trim()) return undefined
+
+    let json: unknown
+    try {
+      json = JSON.parse(text)
+    } catch {
+      return undefined
+    }
+
+    const parsed = OEmbedThumbnailSchema.safeParse(json)
+    return parsed.success ? parsed.data.thumbnail_url : undefined
+  } catch {
+    return undefined
+  }
+}
+
 

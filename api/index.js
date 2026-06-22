@@ -65631,6 +65631,33 @@ function buildSoundCloudPlayerIframeUrl(params) {
 function frameArtworkUrlFromOEmbed(thumbnailUrl) {
   return thumbnailUrl.replace(/-t\d+x\d+/gi, "-t200x200").replace(/-(?:large|original)(?=\.(?:jpg|jpeg|png|webp))/i, "-t200x200");
 }
+var OEmbedThumbnailSchema = external_exports.object({
+  thumbnail_url: external_exports.string().url().optional()
+});
+async function fetchTrackThumbnailUrl(trackId) {
+  try {
+    const id = TrackIdSchema.parse(trackId);
+    const trackApiUrl = `https://api.soundcloud.com/tracks/${id}`;
+    const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(trackApiUrl)}&format=json`;
+    const res = await fetch(oEmbedUrl, {
+      method: "GET",
+      headers: { accept: "application/json" }
+    });
+    if (!res.ok) return void 0;
+    const text = await res.text();
+    if (!text.trim()) return void 0;
+    let json2;
+    try {
+      json2 = JSON.parse(text);
+    } catch {
+      return void 0;
+    }
+    const parsed = OEmbedThumbnailSchema.safeParse(json2);
+    return parsed.success ? parsed.data.thumbnail_url : void 0;
+  } catch {
+    return void 0;
+  }
+}
 
 // lib/styles/theme.ts
 var PRIMARY_COLOR_HEX = "#FF5500";
@@ -65670,6 +65697,68 @@ function parseArtworkFromQuery(param) {
   const decoded = decodeArtworkQueryParam(param);
   const parsed = PlayerArtworkQuerySchema.safeParse({ artwork: decoded });
   return parsed.success ? parsed.data.artwork : void 0;
+}
+async function resolvePlayerArtwork(trackId, artworkQuery) {
+  const fromQuery2 = parseArtworkFromQuery(artworkQuery);
+  if (fromQuery2) return fromQuery2;
+  return fetchTrackThumbnailUrl(trackId);
+}
+var ARTWORK_HERO_STYLES = `
+      .artwork-wrap {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+      .artwork-hero {
+        position: relative;
+        width: min(100%, 360px);
+        max-width: 360px;
+        aspect-ratio: 1 / 1;
+        border-radius: 12px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 28% 22%, rgba(255, 85, 0, 0.42), transparent 52%),
+          linear-gradient(155deg, #2a1810 0%, ${theme.background} 48%, #1a1a1a 100%);
+        box-shadow: inset 0 0 0 1px rgba(255, 85, 0, 0.18);
+      }
+      .artwork-hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, transparent 62%, rgba(0, 0, 0, 0.35) 100%);
+        pointer-events: none;
+        z-index: 2;
+      }
+      .artwork-hero .artwork {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .artwork-hero .artwork.is-ready {
+        opacity: 1;
+      }
+      .artwork-hero .artwork.is-broken {
+        display: none;
+      }
+`;
+function renderArtworkHeroHtml(artworkSrc) {
+  const img = artworkSrc ? `<img
+          class="artwork"
+          width="360"
+          height="360"
+          src="${artworkSrc}"
+          alt="Track artwork"
+          decoding="async"
+          onload="this.classList.add('is-ready')"
+          onerror="this.classList.add('is-broken')"
+        />` : "";
+  return `<div class="artwork-wrap"><div class="artwork-hero">${img}</div></div>`;
 }
 function htmlResponse(html2, status = 200) {
   return new Response(html2, {
@@ -65751,12 +65840,11 @@ function playerTrackNotFoundResponse() {
     400
   );
 }
-function playerTrackResponse(trackId, artworkQuery, origin) {
+function playerTrackResponse(trackId, artworkSrc, origin) {
   const parsedParams = PlayerTrackParamsSchema.safeParse({ trackId });
   if (!parsedParams.success) {
     return playerTrackNotFoundResponse();
   }
-  const artworkSrc = parseArtworkFromQuery(artworkQuery);
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
     trackId: parsedParams.data.trackId,
     colorHex: theme.primary
@@ -65797,34 +65885,7 @@ function playerTrackResponse(trackId, artworkQuery, origin) {
         margin: 0 auto;
         padding: 12px 12px 24px;
       }
-      .artwork-wrap {
-        width: 100%;
-        display: flex;
-        justify-content: center;
-      }
-      .artwork {
-        width: min(100%, 360px);
-        height: auto;
-        max-width: 360px;
-        max-height: 360px;
-        aspect-ratio: 1 / 1;
-        display: block;
-        object-fit: cover;
-        border-radius: 12px;
-        background: #1b1b1b;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-      }
-      .artwork.is-ready {
-        opacity: 1;
-      }
-      .artwork-placeholder {
-        width: min(100%, 360px);
-        max-width: 360px;
-        aspect-ratio: 1 / 1;
-        border-radius: 12px;
-        background: #1b1b1b;
-      }
+      ${ARTWORK_HERO_STYLES}
       .player-wrap {
         position: relative;
         z-index: 0;
@@ -65871,18 +65932,7 @@ function playerTrackResponse(trackId, artworkQuery, origin) {
   </head>
   <body>
     <main>
-      <div class="artwork-wrap">
-        ${artworkSrc ? `<img
-          class="artwork"
-          width="360"
-          height="360"
-          src="${artworkSrc}"
-          alt="Track artwork"
-          decoding="async"
-          onload="this.classList.add('is-ready')"
-          onerror="this.onerror=null;this.style.visibility='hidden';"
-        />` : '<div class="artwork-placeholder" aria-hidden="true"></div>'}
-      </div>
+      ${renderArtworkHeroHtml(artworkSrc)}
       <div class="player-wrap">
         <iframe
           class="player"
@@ -65954,7 +66004,7 @@ function playerTrackResponse(trackId, artworkQuery, origin) {
   </body>
 </html>`);
 }
-function handlePlayerRouteRequest(request) {
+async function handlePlayerRouteRequest(request) {
   const url2 = new URL(request.url);
   const origin = url2.origin;
   const subpath = url2.pathname.replace(/^\/api\/player\/?/, "").replace(/^\/player\/?/, "");
@@ -65962,7 +66012,11 @@ function handlePlayerRouteRequest(request) {
     return playerHomeResponse(origin);
   }
   const trackId = subpath.split("/")[0] ?? "";
-  return playerTrackResponse(trackId, url2.searchParams.get("artwork") ?? void 0, origin);
+  const artworkSrc = await resolvePlayerArtwork(
+    trackId,
+    url2.searchParams.get("artwork") ?? void 0
+  );
+  return playerTrackResponse(trackId, artworkSrc, origin);
 }
 
 // lib/app.tsx
@@ -66052,7 +66106,9 @@ function handlePlayerTrackHono(c3) {
     return playerTrackNotFoundResponse();
   }
   const origin = new URL(c3.req.url).origin;
-  return playerTrackResponse(trackId, c3.req.query("artwork"), origin);
+  return resolvePlayerArtwork(trackId, c3.req.query("artwork")).then(
+    (artworkSrc) => playerTrackResponse(trackId, artworkSrc, origin)
+  );
 }
 var rootHono = new Hono2();
 rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeHono);

@@ -20,6 +20,7 @@ import {
   playerHomeResponse,
   playerTrackNotFoundResponse,
   playerTrackResponse,
+  resolvePlayerArtwork,
 } from './player-pages.js'
 
 const SOUND_CLOUD_ALLOWED_HOSTS = new Set(['soundcloud.com', 'www.soundcloud.com'])
@@ -142,7 +143,9 @@ function handlePlayerTrackHono(c: Context) {
     return playerTrackNotFoundResponse()
   }
   const origin = new URL(c.req.url).origin
-  return playerTrackResponse(trackId, c.req.query('artwork'), origin)
+  return resolvePlayerArtwork(trackId, c.req.query('artwork')).then((artworkSrc) =>
+    playerTrackResponse(trackId, artworkSrc, origin)
+  )
 }
 
 // Root routes (outside Frog basePath `/api`) — used when pathname is `/player` before normalization.

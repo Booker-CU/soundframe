@@ -4,7 +4,7 @@ import {
   buildPlayerTrackEmbed,
   embedMetaTags,
 } from './embed.js'
-import { buildSoundCloudPlayerIframeUrl } from './utils/soundcloud.js'
+import { buildSoundCloudPlayerIframeUrl, fetchTrackThumbnailUrl } from './utils/soundcloud.js'
 import { theme } from './styles/theme.js'
 
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
@@ -38,6 +38,77 @@ function parseArtworkFromQuery(param: string | undefined): string | undefined {
   const decoded = decodeArtworkQueryParam(param)
   const parsed = PlayerArtworkQuerySchema.safeParse({ artwork: decoded })
   return parsed.success ? parsed.data.artwork : undefined
+}
+
+/** Prefer explicit `?artwork=`; otherwise resolve from SoundCloud oEmbed by track id. */
+export async function resolvePlayerArtwork(
+  trackId: string,
+  artworkQuery?: string
+): Promise<string | undefined> {
+  const fromQuery = parseArtworkFromQuery(artworkQuery)
+  if (fromQuery) return fromQuery
+  return fetchTrackThumbnailUrl(trackId)
+}
+
+const ARTWORK_HERO_STYLES = `
+      .artwork-wrap {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+      .artwork-hero {
+        position: relative;
+        width: min(100%, 360px);
+        max-width: 360px;
+        aspect-ratio: 1 / 1;
+        border-radius: 12px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 28% 22%, rgba(255, 85, 0, 0.42), transparent 52%),
+          linear-gradient(155deg, #2a1810 0%, ${theme.background} 48%, #1a1a1a 100%);
+        box-shadow: inset 0 0 0 1px rgba(255, 85, 0, 0.18);
+      }
+      .artwork-hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, transparent 62%, rgba(0, 0, 0, 0.35) 100%);
+        pointer-events: none;
+        z-index: 2;
+      }
+      .artwork-hero .artwork {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .artwork-hero .artwork.is-ready {
+        opacity: 1;
+      }
+      .artwork-hero .artwork.is-broken {
+        display: none;
+      }
+`
+
+function renderArtworkHeroHtml(artworkSrc?: string): string {
+  const img = artworkSrc
+    ? `<img
+          class="artwork"
+          width="360"
+          height="360"
+          src="${artworkSrc}"
+          alt="Track artwork"
+          decoding="async"
+          onload="this.classList.add('is-ready')"
+          onerror="this.classList.add('is-broken')"
+        />`
+    : ''
+  return `<div class="artwork-wrap"><div class="artwork-hero">${img}</div></div>`
 }
 
 function htmlResponse(html: string, status = 200) {
@@ -128,13 +199,16 @@ export function playerTrackNotFoundResponse() {
   )
 }
 
-export function playerTrackResponse(trackId: string, artworkQuery?: string, origin?: string) {
+export function playerTrackResponse(
+  trackId: string,
+  artworkSrc?: string,
+  origin?: string
+) {
   const parsedParams = PlayerTrackParamsSchema.safeParse({ trackId })
   if (!parsedParams.success) {
     return playerTrackNotFoundResponse()
   }
 
-  const artworkSrc = parseArtworkFromQuery(artworkQuery)
   const playerSrc = `${buildSoundCloudPlayerIframeUrl({
     trackId: parsedParams.data.trackId,
     colorHex: theme.primary,
@@ -179,34 +253,7 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string, orig
         margin: 0 auto;
         padding: 12px 12px 24px;
       }
-      .artwork-wrap {
-        width: 100%;
-        display: flex;
-        justify-content: center;
-      }
-      .artwork {
-        width: min(100%, 360px);
-        height: auto;
-        max-width: 360px;
-        max-height: 360px;
-        aspect-ratio: 1 / 1;
-        display: block;
-        object-fit: cover;
-        border-radius: 12px;
-        background: #1b1b1b;
-        opacity: 0;
-        transition: opacity 0.15s ease;
-      }
-      .artwork.is-ready {
-        opacity: 1;
-      }
-      .artwork-placeholder {
-        width: min(100%, 360px);
-        max-width: 360px;
-        aspect-ratio: 1 / 1;
-        border-radius: 12px;
-        background: #1b1b1b;
-      }
+      ${ARTWORK_HERO_STYLES}
       .player-wrap {
         position: relative;
         z-index: 0;
@@ -253,22 +300,7 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string, orig
   </head>
   <body>
     <main>
-      <div class="artwork-wrap">
-        ${
-          artworkSrc
-            ? `<img
-          class="artwork"
-          width="360"
-          height="360"
-          src="${artworkSrc}"
-          alt="Track artwork"
-          decoding="async"
-          onload="this.classList.add('is-ready')"
-          onerror="this.onerror=null;this.style.visibility='hidden';"
-        />`
-            : '<div class="artwork-placeholder" aria-hidden="true"></div>'
-        }
-      </div>
+      ${renderArtworkHeroHtml(artworkSrc)}
       <div class="player-wrap">
         <iframe
           class="player"
@@ -342,7 +374,7 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string, orig
 }
 
 /** Handle /api/player and /api/player/:trackId (and /player rewrites). */
-export function handlePlayerRouteRequest(request: Request) {
+export async function handlePlayerRouteRequest(request: Request) {
   const url = new URL(request.url)
   const origin = url.origin
   const subpath = url.pathname.replace(/^\/api\/player\/?/, '').replace(/^\/player\/?/, '')
@@ -352,5 +384,9 @@ export function handlePlayerRouteRequest(request: Request) {
   }
 
   const trackId = subpath.split('/')[0] ?? ''
-  return playerTrackResponse(trackId, url.searchParams.get('artwork') ?? undefined, origin)
+  const artworkSrc = await resolvePlayerArtwork(
+    trackId,
+    url.searchParams.get('artwork') ?? undefined
+  )
+  return playerTrackResponse(trackId, artworkSrc, origin)
 }
