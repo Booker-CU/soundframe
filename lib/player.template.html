@@ -202,6 +202,33 @@
         }
       }
 
+      const CAST_SHARE_TEXT = 'Listening to music on SoundFrame! 🎵 Check out this track:'
+      const FRAME_EMBED_URL = 'https://soundframe.vercel.app/frame'
+
+      function buildCastComposeUrl(text, embedUrl) {
+        return (
+          'https://farcaster.xyz/~/compose?text=' +
+          encodeURIComponent(text) +
+          '&embeds[]=' +
+          encodeURIComponent(embedUrl)
+        )
+      }
+
+      async function openCastCompose() {
+        const embeds = [FRAME_EMBED_URL]
+        if (window.sdk && window.sdk.actions && window.sdk.actions.composeCast) {
+          await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds })
+          return
+        }
+
+        const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL)
+        if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
+          await window.sdk.actions.openUrl({ url: composeUrl })
+        } else {
+          window.location.href = composeUrl
+        }
+      }
+
       function renderTrack(app, trackId) {
         document.body.className = 'layout-track'
         document.title = 'SoundFrame Player'
@@ -218,17 +245,7 @@
         const shareBtn = document.getElementById('share-btn')
         if (shareBtn) {
           shareBtn.addEventListener('click', () => {
-            const shareText = 'Listening to a mix on SoundFrame! 🎵'
-            const warpcastComposeUrl =
-              'https://warpcast.com/~/compose?text=' +
-              encodeURIComponent(shareText) +
-              '&embeds[]=' +
-              encodeURIComponent(window.location.href)
-            if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
-              window.sdk.actions.openUrl({ url: warpcastComposeUrl })
-            } else {
-              window.open(warpcastComposeUrl, '_blank')
-            }
+            openCastCompose()
           })
         }
       }

@@ -65642,11 +65642,10 @@ function miniAppShellHtml(body) {
 </html>`;
 }
 function playerHomeResponse() {
-  const framePath = "/api/frame";
   return htmlResponse(
     miniAppShellHtml(`
       <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link in the <a href="${framePath}" style="color:${theme.primary}">frame</a> to load a track, or open a shared player from a cast.</p>
+      <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
     `)
   );
 }
@@ -65783,18 +65782,37 @@ function playerTrackResponse(trackId, artworkQuery) {
     </main>
 
     <script>
+      const CAST_SHARE_TEXT = 'Listening to music on SoundFrame! \u{1F3B5} Check out this track:';
+      const FRAME_EMBED_URL = 'https://soundframe.vercel.app/frame';
+
+      function buildCastComposeUrl(text, embedUrl) {
+        return (
+          'https://farcaster.xyz/~/compose?text=' +
+          encodeURIComponent(text) +
+          '&embeds[]=' +
+          encodeURIComponent(embedUrl)
+        );
+      }
+
+      async function openCastCompose() {
+        const embeds = [FRAME_EMBED_URL];
+        if (window.sdk?.actions?.composeCast) {
+          await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds });
+          return;
+        }
+
+        const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL);
+        if (window.sdk?.actions?.openUrl) {
+          await window.sdk.actions.openUrl({ url: composeUrl });
+        } else {
+          window.location.href = composeUrl;
+        }
+      }
+
       const shareBtn = document.getElementById('share-btn');
       if (shareBtn) {
         shareBtn.addEventListener('click', () => {
-          const currentUrl = window.location.href;
-          const shareText = "Listening to a mix on SoundFrame! \u{1F3B5}";
-          const warpcastComposeUrl = \`https://warpcast.com/~/compose?text=\${encodeURIComponent(shareText)}&embeds[]=\${encodeURIComponent(currentUrl)}\`;
-
-          if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
-            window.sdk.actions.openUrl({ url: warpcastComposeUrl });
-          } else {
-            window.open(warpcastComposeUrl, '_blank');
-          }
+          openCastCompose();
         });
       }
     </script>
