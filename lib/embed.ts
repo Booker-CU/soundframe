@@ -82,13 +82,30 @@ export function buildFramePageEmbed(
   }
 }
 
+/** Max length enforced by Farcaster Mini App embed spec for `imageUrl`. */
+const EMBED_IMAGE_URL_MAX_LENGTH = 1024
+
+/** Stable embed art for frame pages (Frog `og:image` URLs exceed embed length limits). */
+export function embedFallbackImageUrl(origin: string): string {
+  return `${origin.replace(/\/$/, '')}/splash.png`
+}
+
+export function isValidEmbedImageUrl(imageUrl: string): boolean {
+  return imageUrl.length > 0 && imageUrl.length <= EMBED_IMAGE_URL_MAX_LENGTH
+}
+
 export function serializeEmbedForMetaTag(embed: MiniAppEmbed): string {
   return JSON.stringify(embed).replace(/'/g, '&#39;')
 }
 
+export function embedMiniappMetaTag(embed: MiniAppEmbed): string {
+  const json = serializeEmbedForMetaTag(embed)
+  return `<meta name="fc:miniapp" content='${json}' />`
+}
+
 export function embedMetaTags(embed: MiniAppEmbed): string {
   const json = serializeEmbedForMetaTag(embed)
-  return `<meta name="fc:miniapp" content='${json}' />\n    <meta name="fc:frame" content='${json}' />`
+  return `${embedMiniappMetaTag(embed)}\n    <meta name="fc:frame" content='${json}' />`
 }
 
 function readMetaContent(html: string, attr: 'property' | 'name', key: string): string | undefined {
@@ -96,13 +113,13 @@ function readMetaContent(html: string, attr: 'property' | 'name', key: string): 
   return html.match(re)?.[1]
 }
 
-/** Prefer Frog's og:image (3:2 frame art); fall back to splash. */
+/** Prefer Frog's og:image for Open Graph; use splash for fc:miniapp (length + validation). */
 export function resolveFrameEmbedImageUrl(html: string, origin: string): string {
   const ogImage = readMetaContent(html, 'property', 'og:image')
-  if (ogImage) return ogImage
+  if (ogImage && isValidEmbedImageUrl(ogImage)) return ogImage
   const frameImage = readMetaContent(html, 'property', 'fc:frame:image')
-  if (frameImage) return frameImage
-  return `${origin.replace(/\/$/, '')}/splash.png`
+  if (frameImage && isValidEmbedImageUrl(frameImage)) return frameImage
+  return embedFallbackImageUrl(origin)
 }
 
 export function resolveFrameEmbedButtonTitle(html: string): string {
@@ -113,7 +130,8 @@ export function injectFrameEmbedMeta(html: string, origin: string): string {
   if (html.includes('name="fc:miniapp"')) return html
   const imageUrl = resolveFrameEmbedImageUrl(html, origin)
   const buttonTitle = resolveFrameEmbedButtonTitle(html)
-  const tags = embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle))
+  // Only fc:miniapp here — Frog already sets property="fc:frame" content="vNext".
+  const tags = embedMiniappMetaTag(buildFramePageEmbed(origin, imageUrl, buttonTitle))
   if (html.includes('</head>')) {
     return html.replace('</head>', `    ${tags}\n  </head>`)
   }

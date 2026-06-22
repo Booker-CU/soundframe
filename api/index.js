@@ -65455,12 +65455,23 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
     }
   };
 }
+var EMBED_IMAGE_URL_MAX_LENGTH = 1024;
+function embedFallbackImageUrl(origin) {
+  return `${origin.replace(/\/$/, "")}/splash.png`;
+}
+function isValidEmbedImageUrl(imageUrl) {
+  return imageUrl.length > 0 && imageUrl.length <= EMBED_IMAGE_URL_MAX_LENGTH;
+}
 function serializeEmbedForMetaTag(embed) {
   return JSON.stringify(embed).replace(/'/g, "&#39;");
 }
+function embedMiniappMetaTag(embed) {
+  const json2 = serializeEmbedForMetaTag(embed);
+  return `<meta name="fc:miniapp" content='${json2}' />`;
+}
 function embedMetaTags(embed) {
   const json2 = serializeEmbedForMetaTag(embed);
-  return `<meta name="fc:miniapp" content='${json2}' />
+  return `${embedMiniappMetaTag(embed)}
     <meta name="fc:frame" content='${json2}' />`;
 }
 function readMetaContent(html2, attr, key) {
@@ -65469,10 +65480,10 @@ function readMetaContent(html2, attr, key) {
 }
 function resolveFrameEmbedImageUrl(html2, origin) {
   const ogImage = readMetaContent(html2, "property", "og:image");
-  if (ogImage) return ogImage;
+  if (ogImage && isValidEmbedImageUrl(ogImage)) return ogImage;
   const frameImage = readMetaContent(html2, "property", "fc:frame:image");
-  if (frameImage) return frameImage;
-  return `${origin.replace(/\/$/, "")}/splash.png`;
+  if (frameImage && isValidEmbedImageUrl(frameImage)) return frameImage;
+  return embedFallbackImageUrl(origin);
 }
 function resolveFrameEmbedButtonTitle(html2) {
   return readMetaContent(html2, "property", "fc:frame:button:1") ?? "Load Track";
@@ -65481,7 +65492,7 @@ function injectFrameEmbedMeta(html2, origin) {
   if (html2.includes('name="fc:miniapp"')) return html2;
   const imageUrl = resolveFrameEmbedImageUrl(html2, origin);
   const buttonTitle = resolveFrameEmbedButtonTitle(html2);
-  const tags = embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle));
+  const tags = embedMiniappMetaTag(buildFramePageEmbed(origin, imageUrl, buttonTitle));
   if (html2.includes("</head>")) {
     return html2.replace("</head>", `    ${tags}
   </head>`);
@@ -66095,7 +66106,7 @@ var PLAYER_HOME_PATH = "/player";
 var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
 var API_PLAYER_HOME_PATH = "/api/player";
 var API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/;
-var FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/;
+var FRAME_HTML_PATH_RE = /^\/(?:api\/)?frame\/?$/;
 function handlePlayerHomeHono(c3) {
   const origin = new URL(c3.req.url).origin;
   return playerHomeResponse(origin);

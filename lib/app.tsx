@@ -130,7 +130,7 @@ const PLAYER_HOME_PATH = '/player'
 const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
 const API_PLAYER_HOME_PATH = '/api/player'
 const API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/
-const FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/
+const FRAME_HTML_PATH_RE = /^\/(?:api\/)?frame\/?$/
 
 function handlePlayerHomeHono(c: Context) {
   const origin = new URL(c.req.url).origin
