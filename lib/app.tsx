@@ -16,7 +16,7 @@ import {
 } from './utils/soundcloud.js'
 import { theme } from './styles/theme.js'
 import {
-  handlePlayerRequest,
+  handlePlayerRouteRequest,
   playerHomeResponse,
   playerTrackNotFoundResponse,
   playerTrackResponse,
@@ -131,22 +131,24 @@ const API_PLAYER_HOME_PATH = '/api/player'
 const API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/
 const FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/
 
-function handlePlayerHomeRequest(c: Context) {
-  return playerHomeResponse()
+function handlePlayerHomeHono(c: Context) {
+  const origin = new URL(c.req.url).origin
+  return playerHomeResponse(origin)
 }
 
-function handlePlayerRequest(c: Context) {
+function handlePlayerTrackHono(c: Context) {
   const trackId = c.req.param('trackId')
   if (!trackId) {
     return playerTrackNotFoundResponse()
   }
-  return playerTrackResponse(trackId, c.req.query('artwork'))
+  const origin = new URL(c.req.url).origin
+  return playerTrackResponse(trackId, c.req.query('artwork'), origin)
 }
 
 // Root routes (outside Frog basePath `/api`) — used when pathname is `/player` before normalization.
 export const rootHono = new Hono()
-rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
-rootHono.get('/player/:trackId', handlePlayerRequest)
+rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeHono)
+rootHono.get('/player/:trackId', handlePlayerTrackHono)
 
 export const app = new Frog({
   assetsPath: '/',
@@ -176,8 +178,8 @@ app.hono.use('/frame/image', async (c, next) => {
   return next()
 })
 
-app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest)
-app.hono.get('/player/:trackId', handlePlayerRequest)
+app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeHono)
+app.hono.get('/player/:trackId', handlePlayerTrackHono)
 
 // Frog mounts routes under basePath `/api`, but Farcaster requires
 // `/.well-known/farcaster.json` at the domain root.
@@ -194,7 +196,7 @@ app.fetch = async (request, env, executionCtx) => {
     API_PLAYER_PATH_RE.test(pathname)
   ) {
     if (pathname.startsWith('/api/')) {
-      return handlePlayerRequest(request)
+      return handlePlayerRouteRequest(request)
     }
     return rootHono.fetch(request, env, executionCtx)
   }

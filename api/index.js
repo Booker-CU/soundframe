@@ -65404,6 +65404,40 @@ function farcasterManifestResponse(request) {
 }
 
 // lib/embed.ts
+function buildPlayerHomeEmbed(origin) {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl: `${base}/splash.png`,
+    button: {
+      title: "Open SoundFrame",
+      action: {
+        type: "launch_frame",
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/player`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
+function buildPlayerTrackEmbed(origin, trackId, imageUrl) {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl: imageUrl ?? `${base}/splash.png`,
+    button: {
+      title: "Listen",
+      action: {
+        type: "launch_frame",
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/player/${trackId}`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
 function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
   const base = origin.replace(/\/$/, "");
   return {
@@ -65414,6 +65448,7 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
       action: {
         type: "launch_frame",
         name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/frame`,
         splashImageUrl: `${base}/splash.png`,
         splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
       }
@@ -65653,7 +65688,7 @@ try {
 }
 </script>`;
 }
-function miniAppShellHtml(body) {
+function miniAppShellHtml(body, headExtras = "") {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -65663,6 +65698,7 @@ function miniAppShellHtml(body) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
+    ${headExtras}
     ${farcasterReadyScript()}
     <style>
       :root { color-scheme: dark; }
@@ -65697,12 +65733,16 @@ function miniAppShellHtml(body) {
   </body>
 </html>`;
 }
-function playerHomeResponse() {
+function playerHomeResponse(origin) {
+  const headExtras = origin ? embedMetaTags(buildPlayerHomeEmbed(origin)) : "";
   return htmlResponse(
-    miniAppShellHtml(`
+    miniAppShellHtml(
+      `
       <h1>SoundFrame</h1>
       <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
-    `)
+    `,
+      headExtras
+    )
   );
 }
 function playerTrackNotFoundResponse() {
@@ -65711,7 +65751,7 @@ function playerTrackNotFoundResponse() {
     400
   );
 }
-function playerTrackResponse(trackId, artworkQuery) {
+function playerTrackResponse(trackId, artworkQuery, origin) {
   const parsedParams = PlayerTrackParamsSchema.safeParse({ trackId });
   if (!parsedParams.success) {
     return playerTrackNotFoundResponse();
@@ -65721,6 +65761,9 @@ function playerTrackResponse(trackId, artworkQuery) {
     trackId: parsedParams.data.trackId,
     colorHex: theme.primary
   })}&auto_play=false`;
+  const embedTags = origin != null ? embedMetaTags(
+    buildPlayerTrackEmbed(origin, parsedParams.data.trackId, artworkSrc)
+  ) : "";
   return htmlResponse(`<!doctype html>
 <html lang="en">
   <head>
@@ -65730,6 +65773,7 @@ function playerTrackResponse(trackId, artworkQuery) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame Player</title>
+    ${embedTags}
     ${farcasterReadyScript()}
     <style>
       :root {
@@ -65910,6 +65954,16 @@ function playerTrackResponse(trackId, artworkQuery) {
   </body>
 </html>`);
 }
+function handlePlayerRouteRequest(request) {
+  const url2 = new URL(request.url);
+  const origin = url2.origin;
+  const subpath = url2.pathname.replace(/^\/api\/player\/?/, "").replace(/^\/player\/?/, "");
+  if (!subpath) {
+    return playerHomeResponse(origin);
+  }
+  const trackId = subpath.split("/")[0] ?? "";
+  return playerTrackResponse(trackId, url2.searchParams.get("artwork") ?? void 0, origin);
+}
 
 // lib/app.tsx
 var SOUND_CLOUD_ALLOWED_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
@@ -65988,19 +66042,21 @@ var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
 var API_PLAYER_HOME_PATH = "/api/player";
 var API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/;
 var FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/;
-function handlePlayerHomeRequest(c3) {
-  return playerHomeResponse();
+function handlePlayerHomeHono(c3) {
+  const origin = new URL(c3.req.url).origin;
+  return playerHomeResponse(origin);
 }
-function handlePlayerRequest(c3) {
+function handlePlayerTrackHono(c3) {
   const trackId = c3.req.param("trackId");
   if (!trackId) {
     return playerTrackNotFoundResponse();
   }
-  return playerTrackResponse(trackId, c3.req.query("artwork"));
+  const origin = new URL(c3.req.url).origin;
+  return playerTrackResponse(trackId, c3.req.query("artwork"), origin);
 }
 var rootHono = new Hono2();
-rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest);
-rootHono.get("/player/:trackId", handlePlayerRequest);
+rootHono.get(PLAYER_HOME_PATH, handlePlayerHomeHono);
+rootHono.get("/player/:trackId", handlePlayerTrackHono);
 var app = new Frog({
   assetsPath: "/",
   basePath: "/api",
@@ -66024,8 +66080,8 @@ app.hono.use("/frame/image", async (c3, next) => {
   }
   return next();
 });
-app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeRequest);
-app.hono.get("/player/:trackId", handlePlayerRequest);
+app.hono.get(PLAYER_HOME_PATH, handlePlayerHomeHono);
+app.hono.get("/player/:trackId", handlePlayerTrackHono);
 var frogFetch = app.fetch.bind(app);
 app.fetch = async (request, env, executionCtx) => {
   if (isFarcasterManifestRequest(request)) {
@@ -66034,7 +66090,7 @@ app.fetch = async (request, env, executionCtx) => {
   const { pathname } = new URL(request.url);
   if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname) || pathname === API_PLAYER_HOME_PATH || API_PLAYER_PATH_RE.test(pathname)) {
     if (pathname.startsWith("/api/")) {
-      return handlePlayerRequest(request);
+      return handlePlayerRouteRequest(request);
     }
     return rootHono.fetch(request, env, executionCtx);
   }

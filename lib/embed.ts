@@ -34,9 +34,31 @@ export function buildPlayerHomeEmbed(origin: string): MiniAppEmbed {
   }
 }
 
+/** Player track embed — used on `/player/:trackId` API responses. */
+export function buildPlayerTrackEmbed(
+  origin: string,
+  trackId: string,
+  imageUrl?: string
+): MiniAppEmbed {
+  const base = origin.replace(/\/$/, '')
+  return {
+    version: '1',
+    imageUrl: imageUrl ?? `${base}/splash.png`,
+    button: {
+      title: 'Listen',
+      action: {
+        type: 'launch_frame',
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/player/${trackId}`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor,
+      },
+    },
+  }
+}
+
 /**
  * Per-page embed for Frog `/frame` HTML (landing + track cards).
- * Omit `launchUrl` so clients default to the fetched document URL.
  */
 export function buildFramePageEmbed(
   origin: string,
@@ -52,6 +74,7 @@ export function buildFramePageEmbed(
       action: {
         type: 'launch_frame',
         name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/frame`,
         splashImageUrl: `${base}/splash.png`,
         splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor,
       },

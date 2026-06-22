@@ -1,4 +1,9 @@
 import { z } from 'zod'
+import {
+  buildPlayerHomeEmbed,
+  buildPlayerTrackEmbed,
+  embedMetaTags,
+} from './embed.js'
 import { buildSoundCloudPlayerIframeUrl } from './utils/soundcloud.js'
 import { theme } from './styles/theme.js'
 
@@ -55,7 +60,7 @@ try {
 </script>`
 }
 
-function miniAppShellHtml(body: string) {
+function miniAppShellHtml(body: string, headExtras = '') {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -65,6 +70,7 @@ function miniAppShellHtml(body: string) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
+    ${headExtras}
     ${farcasterReadyScript()}
     <style>
       :root { color-scheme: dark; }
@@ -100,12 +106,18 @@ function miniAppShellHtml(body: string) {
 </html>`
 }
 
-export function playerHomeResponse() {
+export function playerHomeResponse(origin?: string) {
+  const headExtras = origin
+    ? embedMetaTags(buildPlayerHomeEmbed(origin))
+    : ''
   return htmlResponse(
-    miniAppShellHtml(`
+    miniAppShellHtml(
+      `
       <h1>SoundFrame</h1>
       <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
-    `)
+    `,
+      headExtras
+    )
   )
 }
 
@@ -116,7 +128,7 @@ export function playerTrackNotFoundResponse() {
   )
 }
 
-export function playerTrackResponse(trackId: string, artworkQuery?: string) {
+export function playerTrackResponse(trackId: string, artworkQuery?: string, origin?: string) {
   const parsedParams = PlayerTrackParamsSchema.safeParse({ trackId })
   if (!parsedParams.success) {
     return playerTrackNotFoundResponse()
@@ -127,6 +139,12 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
     trackId: parsedParams.data.trackId,
     colorHex: theme.primary,
   })}&auto_play=false`
+  const embedTags =
+    origin != null
+      ? embedMetaTags(
+          buildPlayerTrackEmbed(origin, parsedParams.data.trackId, artworkSrc)
+        )
+      : ''
 
   return htmlResponse(`<!doctype html>
 <html lang="en">
@@ -137,6 +155,7 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame Player</title>
+    ${embedTags}
     ${farcasterReadyScript()}
     <style>
       :root {
@@ -323,14 +342,15 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
 }
 
 /** Handle /api/player and /api/player/:trackId (and /player rewrites). */
-export function handlePlayerRequest(request: Request) {
+export function handlePlayerRouteRequest(request: Request) {
   const url = new URL(request.url)
+  const origin = url.origin
   const subpath = url.pathname.replace(/^\/api\/player\/?/, '').replace(/^\/player\/?/, '')
 
   if (!subpath) {
-    return playerHomeResponse()
+    return playerHomeResponse(origin)
   }
 
   const trackId = subpath.split('/')[0] ?? ''
-  return playerTrackResponse(trackId, url.searchParams.get('artwork') ?? undefined)
+  return playerTrackResponse(trackId, url.searchParams.get('artwork') ?? undefined, origin)
 }
