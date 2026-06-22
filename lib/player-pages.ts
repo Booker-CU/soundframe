@@ -46,8 +46,12 @@ function htmlResponse(html: string, status = 200) {
 function farcasterReadyScript() {
   return `<script type="module">
 import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
-window.sdk = sdk
-await sdk.actions.ready()
+try {
+  window.sdk = sdk
+  await sdk.actions.ready()
+} catch (err) {
+  console.error('[SoundFrame] SDK init failed:', err)
+}
 </script>`
 }
 
@@ -149,6 +153,8 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       main {
+        position: relative;
+        isolation: isolate;
         width: 100%;
         max-width: 560px;
         margin: 0 auto;
@@ -182,15 +188,24 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
         border-radius: 12px;
         background: #1b1b1b;
       }
+      .player-wrap {
+        position: relative;
+        z-index: 0;
+        width: 100%;
+        height: 166px;
+        margin-top: 12px;
+        overflow: hidden;
+        border-radius: 12px;
+      }
       .player {
+        display: block;
         width: 100%;
         height: 166px;
         border: 0;
-        border-radius: 12px;
-        margin-top: 12px;
-        overflow: hidden;
       }
       .share {
+        position: relative;
+        z-index: 2;
         margin-top: 14px;
         width: 100%;
         border: 0;
@@ -200,6 +215,13 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
         color: #ffffff;
         font-weight: 700;
         font-size: 16px;
+        cursor: pointer;
+        pointer-events: auto;
+        touch-action: manipulation;
+      }
+      #share-btn {
+        position: relative;
+        z-index: 2;
       }
       #share-btn:hover {
         background-color: #2a2a2a;
@@ -228,18 +250,21 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
             : '<div class="artwork-placeholder" aria-hidden="true"></div>'
         }
       </div>
-      <iframe
-        class="player"
-        height="166"
-        title="SoundCloud player"
-        scrolling="no"
-        allow="autoplay"
-        src="${playerSrc}"
-      ></iframe>
+      <div class="player-wrap">
+        <iframe
+          class="player"
+          height="166"
+          title="SoundCloud player"
+          scrolling="no"
+          allow="autoplay"
+          src="${playerSrc}"
+        ></iframe>
+      </div>
       <button
         id="share-btn"
         class="share"
         type="button"
+        onclick="window.__soundframeShare(event)"
         style="cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;"
       >Share</button>
     </main>
@@ -258,26 +283,40 @@ export function playerTrackResponse(trackId: string, artworkQuery?: string) {
       }
 
       async function openCastCompose() {
-        const embeds = [FRAME_EMBED_URL];
-        if (window.sdk?.actions?.composeCast) {
-          await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds });
-          return;
-        }
+        try {
+          const embeds = [FRAME_EMBED_URL];
+          if (window.sdk?.actions?.composeCast) {
+            console.log('[SoundFrame] composeCast via SDK');
+            await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds });
+            return;
+          }
 
-        const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL);
-        if (window.sdk?.actions?.openUrl) {
-          await window.sdk.actions.openUrl({ url: composeUrl });
-        } else {
-          window.location.href = composeUrl;
+          const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL);
+          console.log('[SoundFrame] opening cast intent URL:', composeUrl);
+          if (window.sdk?.actions?.openUrl) {
+            await window.sdk.actions.openUrl({ url: composeUrl });
+          } else {
+            window.location.href = composeUrl;
+          }
+        } catch (err) {
+          console.error('[SoundFrame] openCastCompose failed:', err);
         }
       }
 
-      const shareBtn = document.getElementById('share-btn');
-      if (shareBtn) {
-        shareBtn.addEventListener('click', () => {
-          openCastCompose();
-        });
+      function handleShareClick(event) {
+        console.log('Share button clicked!');
+        try {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          void openCastCompose();
+        } catch (err) {
+          console.error('[SoundFrame] Share click handler failed:', err);
+        }
       }
+
+      window.__soundframeShare = handleShareClick;
     </script>
   </body>
 </html>`)

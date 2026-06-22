@@ -11,8 +11,16 @@
     <meta name="fc:frame" content='{"version":"1","imageUrl":"http://localhost:5173/splash.png","button":{"title":"Open SoundFrame","action":{"type":"launch_miniapp","name":"SoundFrame","url":"http://localhost:5173/player","splashImageUrl":"http://localhost:5173/splash.png","splashBackgroundColor":"#121212"}}}' />
     <script src="/miniapp-sdk.js"></script>
     <script>
-      window.sdk = miniapp.sdk
-      miniapp.sdk.actions.ready()
+      try {
+        if (typeof miniapp !== 'undefined' && miniapp.sdk) {
+          window.sdk = miniapp.sdk
+          void miniapp.sdk.actions.ready()
+        } else {
+          console.warn('[SoundFrame] miniapp SDK unavailable; share will use cast intent URL')
+        }
+      } catch (err) {
+        console.error('[SoundFrame] SDK init failed:', err)
+      }
     </script>
     <style>
       :root {
@@ -37,6 +45,8 @@
         padding: 24px;
       }
       main {
+        position: relative;
+        isolation: isolate;
         width: 100%;
         max-width: 560px;
         margin: 0 auto;
@@ -87,15 +97,24 @@
         border-radius: 12px;
         background: #1b1b1b;
       }
+      .player-wrap {
+        position: relative;
+        z-index: 0;
+        width: 100%;
+        height: 166px;
+        margin-top: 12px;
+        overflow: hidden;
+        border-radius: 12px;
+      }
       .player {
+        display: block;
         width: 100%;
         height: 166px;
         border: 0;
-        border-radius: 12px;
-        margin-top: 12px;
-        overflow: hidden;
       }
       .share {
+        position: relative;
+        z-index: 2;
         margin-top: 14px;
         width: 100%;
         border: 0;
@@ -106,6 +125,8 @@
         font-weight: 700;
         font-size: 16px;
         cursor: pointer;
+        pointer-events: auto;
+        touch-action: manipulation;
         transition: background-color 0.2s ease, transform 0.1s ease;
       }
       .share:hover {
@@ -114,6 +135,10 @@
       }
       .share:active {
         transform: scale(0.98);
+      }
+      #share-btn {
+        position: relative;
+        z-index: 2;
       }
       .hidden {
         display: none;
@@ -215,19 +240,40 @@
       }
 
       async function openCastCompose() {
-        const embeds = [FRAME_EMBED_URL]
-        if (window.sdk && window.sdk.actions && window.sdk.actions.composeCast) {
-          await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds })
-          return
-        }
+        try {
+          const embeds = [FRAME_EMBED_URL]
+          if (window.sdk && window.sdk.actions && window.sdk.actions.composeCast) {
+            console.log('[SoundFrame] composeCast via SDK')
+            await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds })
+            return
+          }
 
-        const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL)
-        if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
-          await window.sdk.actions.openUrl({ url: composeUrl })
-        } else {
-          window.location.href = composeUrl
+          const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL)
+          console.log('[SoundFrame] opening cast intent URL:', composeUrl)
+          if (window.sdk && window.sdk.actions && window.sdk.actions.openUrl) {
+            await window.sdk.actions.openUrl({ url: composeUrl })
+          } else {
+            window.location.href = composeUrl
+          }
+        } catch (err) {
+          console.error('[SoundFrame] openCastCompose failed:', err)
         }
       }
+
+      function handleShareClick(event) {
+        console.log('Share button clicked!')
+        try {
+          if (event) {
+            event.preventDefault()
+            event.stopPropagation()
+          }
+          void openCastCompose()
+        } catch (err) {
+          console.error('[SoundFrame] Share click handler failed:', err)
+        }
+      }
+
+      window.__soundframeShare = handleShareClick
 
       function renderTrack(app, trackId) {
         document.body.className = 'layout-track'
@@ -239,15 +285,10 @@
 
         app.innerHTML =
           '<div class="artwork-wrap">' + artworkHtml + '</div>' +
+          '<div class="player-wrap">' +
           '<iframe class="player" height="166" title="SoundCloud player" scrolling="no" allow="autoplay" src="' + buildPlayerSrc(trackId) + '"></iframe>' +
-          '<button id="share-btn" class="share" type="button">Share</button>'
-
-        const shareBtn = document.getElementById('share-btn')
-        if (shareBtn) {
-          shareBtn.addEventListener('click', () => {
-            openCastCompose()
-          })
-        }
+          '</div>' +
+          '<button id="share-btn" class="share" type="button" onclick="window.__soundframeShare(event)">Share</button>'
       }
 
       function renderUnavailable(app) {
