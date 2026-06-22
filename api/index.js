@@ -65403,6 +65403,58 @@ function farcasterManifestResponse(request) {
   });
 }
 
+// lib/embed.ts
+function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl,
+    button: {
+      title: buttonTitle.slice(0, 32),
+      action: {
+        type: "launch_frame",
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
+function serializeEmbedForMetaTag(embed) {
+  return JSON.stringify(embed).replace(/'/g, "&#39;");
+}
+function embedMetaTags(embed) {
+  const json2 = serializeEmbedForMetaTag(embed);
+  return `<meta name="fc:miniapp" content='${json2}' />
+    <meta name="fc:frame" content='${json2}' />`;
+}
+function readMetaContent(html2, attr, key) {
+  const re3 = new RegExp(`<meta ${attr}="${key}" content="([^"]*)"`, "i");
+  return html2.match(re3)?.[1];
+}
+function resolveFrameEmbedImageUrl(html2, origin) {
+  const ogImage = readMetaContent(html2, "property", "og:image");
+  if (ogImage) return ogImage;
+  const frameImage = readMetaContent(html2, "property", "fc:frame:image");
+  if (frameImage) return frameImage;
+  return `${origin.replace(/\/$/, "")}/splash.png`;
+}
+function resolveFrameEmbedButtonTitle(html2) {
+  return readMetaContent(html2, "property", "fc:frame:button:1") ?? "Load Track";
+}
+function injectFrameEmbedMeta(html2, origin) {
+  if (html2.includes('name="fc:miniapp"')) return html2;
+  const imageUrl = resolveFrameEmbedImageUrl(html2, origin);
+  const buttonTitle = resolveFrameEmbedButtonTitle(html2);
+  const tags = embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle));
+  if (html2.includes("</head>")) {
+    return html2.replace("</head>", `    ${tags}
+  </head>`);
+  }
+  return `${tags}
+${html2}`;
+}
+
 // lib/utils/soundcloud.ts
 var SOUND_CLOUD_CANONICAL_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
 var SOUND_CLOUD_SHORT_LINK_HOSTS = /* @__PURE__ */ new Set(["on.soundcloud.com"]);
@@ -65933,6 +65985,7 @@ function isValidTrackId(trackId) {
 }
 var PLAYER_HOME_PATH = "/player";
 var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
+var FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/;
 function handlePlayerHomeRequest(c3) {
   return playerHomeResponse();
 }
@@ -65980,7 +66033,15 @@ app.fetch = async (request, env, executionCtx) => {
   if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
     return rootHono.fetch(request, env, executionCtx);
   }
-  return frogFetch(request, env, executionCtx);
+  const response = await frogFetch(request, env, executionCtx);
+  if (FRAME_HTML_PATH_RE.test(pathname) && response.headers.get("content-type")?.includes("text/html")) {
+    const origin = new URL(request.url).origin;
+    const html2 = injectFrameEmbedMeta(await response.text(), origin);
+    const headers = new Headers(response.headers);
+    headers.delete("content-length");
+    return new Response(html2, { status: response.status, headers });
+  }
+  return response;
 };
 app.frame("/frame", async (c3) => {
   const queryUrl = c3.req.query("url");

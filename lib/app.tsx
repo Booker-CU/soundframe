@@ -2,6 +2,7 @@ import { Button, Frog, TextInput } from 'frog'
 // import { neynar } from 'frog/hubs'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
+import { injectFrameEmbedMeta } from './embed.js'
 import {
   buildFarcasterManifest,
   farcasterManifestResponse,
@@ -125,6 +126,7 @@ function isValidTrackId(trackId: string) {
 
 const PLAYER_HOME_PATH = '/player'
 const PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/
+const FRAME_HTML_PATH_RE = /^\/api\/frame\/?$/
 
 function handlePlayerHomeRequest(c: Context) {
   return playerHomeResponse()
@@ -185,7 +187,18 @@ app.fetch = async (request, env, executionCtx) => {
   if (pathname === PLAYER_HOME_PATH || PLAYER_PATH_RE.test(pathname)) {
     return rootHono.fetch(request, env, executionCtx)
   }
-  return frogFetch(request, env, executionCtx)
+  const response = await frogFetch(request, env, executionCtx)
+  if (
+    FRAME_HTML_PATH_RE.test(pathname) &&
+    response.headers.get('content-type')?.includes('text/html')
+  ) {
+    const origin = new URL(request.url).origin
+    const html = injectFrameEmbedMeta(await response.text(), origin)
+    const headers = new Headers(response.headers)
+    headers.delete('content-length')
+    return new Response(html, { status: response.status, headers })
+  }
+  return response
 }
 
 app.frame('/frame', async (c) => {

@@ -1,6 +1,7 @@
 import * as esbuild from 'esbuild'
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 
+import { buildPlayerHomeEmbed, serializeEmbedForMetaTag } from '../lib/embed.js'
 import { buildFarcasterManifest } from '../lib/manifest.js'
 
 function deploymentOrigin() {
@@ -10,23 +11,6 @@ function deploymentOrigin() {
     process.env.VERCEL_BRANCH_URL
   if (fromEnv) return `https://${fromEnv.replace(/^https?:\/\//, '')}`
   return 'http://localhost:5173'
-}
-
-function buildMiniAppEmbed(origin: string) {
-  return {
-    version: '1',
-    imageUrl: `${origin}/splash.png`,
-    button: {
-      title: 'Open SoundFrame',
-      action: {
-        type: 'launch_miniapp',
-        name: 'SoundFrame',
-        url: `${origin}/player`,
-        splashImageUrl: `${origin}/splash.png`,
-        splashBackgroundColor: '#121212',
-      },
-    },
-  }
 }
 
 /**
@@ -41,7 +25,7 @@ rmSync('api/frame.js', { force: true })
 rmSync('api/frame/image.js', { force: true })
 
 const origin = deploymentOrigin()
-const embedJson = JSON.stringify(buildMiniAppEmbed(origin))
+const embedJson = serializeEmbedForMetaTag(buildPlayerHomeEmbed(origin))
 
 mkdirSync('public/.well-known', { recursive: true })
 writeFileSync(
