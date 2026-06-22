@@ -1,12 +1,13 @@
 /**
  * Farcaster Mini App manifest (v2).
- * Replace accountAssociation via Farcaster Developer Tools before production validation.
  * Webhook notification secrets are server-side env vars, not manifest fields.
  */
-export const FARCASTER_ACCOUNT_ASSOCIATION_STUB = {
-  header: 'eyJhbGciOiJFUzI1NksifQ',
-  payload: 'eyJkb21haW4iOiJZT1VSX0RPTUFJTiJ9',
-  signature: 'REPLACE_WITH_SIGNED_ACCOUNT_ASSOCIATION',
+export const FARCASTER_ACCOUNT_ASSOCIATION = {
+  header:
+    'eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ',
+  payload: 'eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ',
+  signature:
+    'i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw=',
 } as const
 
 export const FARCASTER_MINIAPP_CONFIG = {
@@ -29,7 +30,7 @@ export function buildFarcasterManifest(origin: string) {
     splashImageUrl: `${base}/splash.png`,
   }
   return {
-    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION_STUB,
+    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
     miniapp,
     frame: miniapp,
   }
