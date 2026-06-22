@@ -1,12 +1,14 @@
 import { FARCASTER_MINIAPP_CONFIG } from './manifest.js'
 
+export type MiniAppEmbedActionType = 'launch_frame' | 'launch_miniapp'
+
 export type MiniAppEmbed = {
   version: '1'
   imageUrl: string
   button: {
     title: string
     action: {
-      type: 'launch_frame'
+      type: MiniAppEmbedActionType
       name: string
       url?: string
       splashImageUrl: string
@@ -63,7 +65,8 @@ export function buildPlayerTrackEmbed(
 export function buildFramePageEmbed(
   origin: string,
   imageUrl: string,
-  buttonTitle = 'Load Track'
+  buttonTitle = 'Load Track',
+  actionType: MiniAppEmbedActionType = 'launch_miniapp'
 ): MiniAppEmbed {
   const base = origin.replace(/\/$/, '')
   return {
@@ -72,7 +75,7 @@ export function buildFramePageEmbed(
     button: {
       title: buttonTitle.slice(0, 32),
       action: {
-        type: 'launch_frame',
+        type: actionType,
         name: FARCASTER_MINIAPP_CONFIG.name,
         url: `${base}/frame`,
         splashImageUrl: `${base}/splash.png`,
@@ -85,9 +88,9 @@ export function buildFramePageEmbed(
 /** Max length enforced by Farcaster Mini App embed spec for `imageUrl`. */
 const EMBED_IMAGE_URL_MAX_LENGTH = 1024
 
-/** Stable embed art for frame pages (Frog `og:image` URLs exceed embed length limits). */
+/** Stable 3:2 embed art for /frame (short URL; splash.png is 1:1). */
 export function embedFallbackImageUrl(origin: string): string {
-  return `${origin.replace(/\/$/, '')}/splash.png`
+  return `${origin.replace(/\/$/, '')}/embed-card`
 }
 
 export function isValidEmbedImageUrl(imageUrl: string): boolean {
@@ -126,14 +129,24 @@ export function resolveFrameEmbedButtonTitle(html: string): string {
   return readMetaContent(html, 'property', 'fc:frame:button:1') ?? 'Load Track'
 }
 
+export function embedFramePageMetaTags(
+  origin: string,
+  imageUrl: string,
+  buttonTitle: string
+): string {
+  const miniappEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, 'launch_miniapp')
+  const legacyEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, 'launch_frame')
+  return `${embedMiniappMetaTag(miniappEmbed)}\n    <meta name="fc:frame" content='${serializeEmbedForMetaTag(legacyEmbed)}' />`
+}
+
 export function injectFrameEmbedMeta(html: string, origin: string): string {
   if (html.includes('name="fc:miniapp"')) return html
   const imageUrl = resolveFrameEmbedImageUrl(html, origin)
   const buttonTitle = resolveFrameEmbedButtonTitle(html)
-  // Only fc:miniapp here — Frog already sets property="fc:frame" content="vNext".
-  const tags = embedMiniappMetaTag(buildFramePageEmbed(origin, imageUrl, buttonTitle))
-  if (html.includes('</head>')) {
-    return html.replace('</head>', `    ${tags}\n  </head>`)
+  // Inject before Frog's `property="fc:frame" vNext` so embed scrapers see miniapp metadata first.
+  const tags = embedFramePageMetaTags(origin, imageUrl, buttonTitle)
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head([^>]*)>/i, `<head$1>\n    ${tags}`)
   }
   return `${tags}\n${html}`
 }

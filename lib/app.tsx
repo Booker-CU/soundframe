@@ -3,6 +3,7 @@ import { Button, Frog, TextInput } from 'frog'
 import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { injectFrameEmbedMeta } from './embed.js'
+import { embedCardImageResponse } from './embed-card.js'
 import {
   buildFarcasterManifest,
   farcasterManifestResponse,
@@ -168,6 +169,9 @@ app.hono.get('/.well-known/farcaster.json', (c) => {
   c.header('Access-Control-Allow-Origin', '*')
   return c.json(buildFarcasterManifest(origin))
 })
+
+// 3:2 embed preview image (fc:miniapp `imageUrl` for /frame).
+app.hono.get('/embed-card', () => embedCardImageResponse())
 
 // Guard malformed /frame/image requests before Frog parses compressed payload.
 app.hono.use('/frame/image', async (c, next) => {

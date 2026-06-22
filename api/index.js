@@ -65438,7 +65438,7 @@ function buildPlayerTrackEmbed(origin, trackId, imageUrl) {
     }
   };
 }
-function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
+function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track", actionType = "launch_miniapp") {
   const base = origin.replace(/\/$/, "");
   return {
     version: "1",
@@ -65446,7 +65446,7 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
     button: {
       title: buttonTitle.slice(0, 32),
       action: {
-        type: "launch_frame",
+        type: actionType,
         name: FARCASTER_MINIAPP_CONFIG.name,
         url: `${base}/frame`,
         splashImageUrl: `${base}/splash.png`,
@@ -65457,7 +65457,7 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track") {
 }
 var EMBED_IMAGE_URL_MAX_LENGTH = 1024;
 function embedFallbackImageUrl(origin) {
-  return `${origin.replace(/\/$/, "")}/splash.png`;
+  return `${origin.replace(/\/$/, "")}/embed-card`;
 }
 function isValidEmbedImageUrl(imageUrl) {
   return imageUrl.length > 0 && imageUrl.length <= EMBED_IMAGE_URL_MAX_LENGTH;
@@ -65488,17 +65488,73 @@ function resolveFrameEmbedImageUrl(html2, origin) {
 function resolveFrameEmbedButtonTitle(html2) {
   return readMetaContent(html2, "property", "fc:frame:button:1") ?? "Load Track";
 }
+function embedFramePageMetaTags(origin, imageUrl, buttonTitle) {
+  const miniappEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_miniapp");
+  const legacyEmbed = buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_frame");
+  return `${embedMiniappMetaTag(miniappEmbed)}
+    <meta name="fc:frame" content='${serializeEmbedForMetaTag(legacyEmbed)}' />`;
+}
 function injectFrameEmbedMeta(html2, origin) {
   if (html2.includes('name="fc:miniapp"')) return html2;
   const imageUrl = resolveFrameEmbedImageUrl(html2, origin);
   const buttonTitle = resolveFrameEmbedButtonTitle(html2);
-  const tags = embedMiniappMetaTag(buildFramePageEmbed(origin, imageUrl, buttonTitle));
-  if (html2.includes("</head>")) {
-    return html2.replace("</head>", `    ${tags}
-  </head>`);
+  const tags = embedFramePageMetaTags(origin, imageUrl, buttonTitle);
+  if (/<head[^>]*>/i.test(html2)) {
+    return html2.replace(/<head([^>]*)>/i, `<head$1>
+    ${tags}`);
   }
   return `${tags}
 ${html2}`;
+}
+
+// lib/embed-card.tsx
+init_index_node();
+
+// lib/styles/theme.ts
+var PRIMARY_COLOR_HEX = "#FF5500";
+var SECONDARY_COLOR_HEX = "#000000";
+var BACKGROUND_COLOR_HEX = "#121212";
+var theme = {
+  primary: PRIMARY_COLOR_HEX,
+  secondary: SECONDARY_COLOR_HEX,
+  background: BACKGROUND_COLOR_HEX
+};
+
+// lib/embed-card.tsx
+function embedCardImageResponse() {
+  return new ImageResponse(
+    /* @__PURE__ */ jsxDEV2(
+      "div",
+      {
+        style: {
+          alignItems: "center",
+          background: theme.background,
+          display: "flex",
+          height: "100%",
+          justifyContent: "center",
+          width: "100%"
+        },
+        children: /* @__PURE__ */ jsxDEV2(
+          "div",
+          {
+            style: {
+              background: `radial-gradient(circle at 30% 25%, ${theme.primary}, #2a1810 55%, ${theme.background} 100%)`,
+              borderRadius: 32,
+              height: 280,
+              width: 280
+            }
+          }
+        )
+      }
+    ),
+    {
+      width: 1200,
+      height: 800,
+      headers: {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    }
+  );
 }
 
 // lib/utils/soundcloud.ts
@@ -65669,16 +65725,6 @@ async function fetchTrackThumbnailUrl(trackId) {
     return void 0;
   }
 }
-
-// lib/styles/theme.ts
-var PRIMARY_COLOR_HEX = "#FF5500";
-var SECONDARY_COLOR_HEX = "#000000";
-var BACKGROUND_COLOR_HEX = "#121212";
-var theme = {
-  primary: PRIMARY_COLOR_HEX,
-  secondary: SECONDARY_COLOR_HEX,
-  background: BACKGROUND_COLOR_HEX
-};
 
 // lib/player-pages.ts
 var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
@@ -66137,6 +66183,7 @@ app.hono.get("/.well-known/farcaster.json", (c3) => {
   c3.header("Access-Control-Allow-Origin", "*");
   return c3.json(buildFarcasterManifest(origin));
 });
+app.hono.get("/embed-card", () => embedCardImageResponse());
 app.hono.use("/frame/image", async (c3, next) => {
   const imageParam = c3.req.query("image");
   if (!imageParam || !imageParam.trim()) {
