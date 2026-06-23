@@ -65456,7 +65456,7 @@ function embedCardImageResponse() {
       width: 1200,
       height: 800,
       headers: {
-        "Cache-Control": "public, max-age=31536000, immutable"
+        "Cache-Control": "public, max-age=3600, must-revalidate"
       }
     }
   );
@@ -65727,7 +65727,7 @@ function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track", actio
   };
 }
 function embedFallbackImageUrl(origin) {
-  return `${origin.replace(/\/$/, "")}/embed-card.png`;
+  return `${origin.replace(/\/$/, "")}/frame-embed.png`;
 }
 function serializeEmbedForMetaTag(embed) {
   return JSON.stringify(embed).replace(/'/g, "&#39;");

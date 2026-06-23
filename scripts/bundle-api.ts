@@ -66,6 +66,7 @@ for (const asset of ['noto-sans-v27-latin-regular.ttf', 'yoga.wasm', 'resvg.wasm
 
 const { embedCardImageResponse } = await import('../lib/embed-card.tsx')
 const embedCardPng = Buffer.from(await (await embedCardImageResponse()).arrayBuffer())
+writeFileSync('public/frame-embed.png', embedCardPng)
 writeFileSync('public/embed-card.png', embedCardPng)
 
 writeFileSync('api/frame.js', "export { default, GET, POST } from './index.js'\n")

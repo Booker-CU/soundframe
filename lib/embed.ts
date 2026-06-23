@@ -88,9 +88,9 @@ export function buildFramePageEmbed(
 /** Max length enforced by Farcaster Mini App embed spec for `imageUrl`. */
 const EMBED_IMAGE_URL_MAX_LENGTH = 1024
 
-/** Stable 3:2 embed art for /frame — static `public/embed-card.png` (see bundle-api.ts). */
+/** Stable 3:2 embed art for /frame — `public/frame-embed.png` (see bundle-api.ts). */
 export function embedFallbackImageUrl(origin: string): string {
-  return `${origin.replace(/\/$/, '')}/embed-card.png`
+  return `${origin.replace(/\/$/, '')}/frame-embed.png`
 }
 
 export function isValidEmbedImageUrl(imageUrl: string): boolean {

@@ -1,6 +1,17 @@
 {
   "buildCommand": "npm run build",
   "framework": null,
+  "headers": [
+    {
+      "source": "/frame-embed.png",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, must-revalidate"
+        }
+      ]
+    }
+  ],
   "redirects": [
     {
       "source": "/",
@@ -16,6 +27,10 @@
     {
       "source": "/.well-known/farcaster.json",
       "destination": "/api/.well-known/farcaster.json"
+    },
+    {
+      "source": "/embed-card",
+      "destination": "/api/embed-card"
     },
     {
       "source": "/frame",
