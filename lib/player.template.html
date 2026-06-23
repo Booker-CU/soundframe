@@ -161,16 +161,30 @@
         margin-top: 16px;
         font-size: 0.9rem;
       }
-      .frame-url {
-        display: block;
-        margin: 8px 0 12px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: #1b1b1b;
-        color: #e8e8e8;
-        font-size: 0.8rem;
-        word-break: break-all;
-        text-align: left;
+      form {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      input[type='url'] {
+        width: 100%;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #1a1a1a;
+        color: #fff;
+        font-size: 16px;
+      }
+      button[type='submit'] {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: var(--primary);
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        cursor: pointer;
       }
     </style>
   </head>
@@ -221,24 +235,13 @@
       function renderHome(app) {
         document.body.className = 'layout-home'
         document.title = 'SoundFrame'
-        const frameUrl = window.location.origin + '/frame'
         app.innerHTML =
           '<h1>SoundFrame</h1>' +
-          '<p>Open a shared player from a cast, or test the frame in Warpcast Developer Tools.</p>' +
-          '<p class="frame-url-label">Frame URL (paste in the <strong>Frame</strong> tab, not the mini app URL):</p>' +
-          '<code class="frame-url">' + frameUrl + '</code>' +
-          '<button id="copy-frame-url" class="share" type="button">Copy frame URL</button>'
-        const copyBtn = document.getElementById('copy-frame-url')
-        if (copyBtn) {
-          copyBtn.addEventListener('click', async () => {
-            try {
-              await navigator.clipboard.writeText(frameUrl)
-              copyBtn.textContent = 'Copied!'
-            } catch {
-              copyBtn.textContent = frameUrl
-            }
-          })
-        }
+          '<p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>' +
+          '<form method="GET" action="/frame">' +
+          '<input name="url" type="url" placeholder="https://soundcloud.com/..." required />' +
+          '<button type="submit">Load Track</button>' +
+          '</form>'
       }
 
       const CAST_SHARE_TEXT = 'Listening to music on SoundFrame! 🎵 Check out this track:'

@@ -210,6 +210,13 @@ function miniAppShellHtml(body: string, headExtras = '') {
 </html>`
 }
 
+const SOUNDCLOUD_URL_FORM_HTML = `
+      <form method="GET" action="/frame">
+        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
+        <button type="submit">Load Track</button>
+      </form>
+`
+
 export function playerHomeResponse(origin?: string) {
   const headExtras = origin
     ? embedMetaTags(buildPlayerHomeEmbed(origin))
@@ -218,7 +225,8 @@ export function playerHomeResponse(origin?: string) {
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Open a shared player from a cast, or paste a SoundCloud link at <code>/frame</code>.</p>
+      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
+      ${SOUNDCLOUD_URL_FORM_HTML}
     `,
       headExtras
     )
@@ -241,11 +249,8 @@ export function frameEmbedLandingResponse(origin?: string) {
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link to open the player.</p>
-      <form method="GET" action="/frame">
-        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
-        <button type="submit">Load Track</button>
-      </form>
+      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
+      ${SOUNDCLOUD_URL_FORM_HTML}
     `,
       headExtras
     )

@@ -65679,9 +65679,9 @@ function buildPlayerHomeEmbed(origin) {
   const base = origin.replace(/\/$/, "");
   return {
     version: "1",
-    imageUrl: `${base}/splash.png`,
+    imageUrl: embedFallbackImageUrl(origin),
     button: {
-      title: "Open SoundFrame",
+      title: "Load Track",
       action: {
         type: "launch_frame",
         name: FARCASTER_MINIAPP_CONFIG.name,
@@ -65920,13 +65920,20 @@ function miniAppShellHtml(body, headExtras = "") {
   </body>
 </html>`;
 }
+var SOUNDCLOUD_URL_FORM_HTML = `
+      <form method="GET" action="/frame">
+        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
+        <button type="submit">Load Track</button>
+      </form>
+`;
 function playerHomeResponse(origin) {
   const headExtras = origin ? embedMetaTags(buildPlayerHomeEmbed(origin)) : "";
   return htmlResponse(
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Open a shared player from a cast, or paste a SoundCloud link at <code>/frame</code>.</p>
+      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
+      ${SOUNDCLOUD_URL_FORM_HTML}
     `,
       headExtras
     )
@@ -65945,11 +65952,8 @@ function frameEmbedLandingResponse(origin) {
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link to open the player.</p>
-      <form method="GET" action="/frame">
-        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
-        <button type="submit">Load Track</button>
-      </form>
+      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
+      ${SOUNDCLOUD_URL_FORM_HTML}
     `,
       headExtras
     )

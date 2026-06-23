@@ -22,9 +22,9 @@ export function buildPlayerHomeEmbed(origin: string): MiniAppEmbed {
   const base = origin.replace(/\/$/, '')
   return {
     version: '1',
-    imageUrl: `${base}/splash.png`,
+    imageUrl: embedFallbackImageUrl(origin),
     button: {
-      title: 'Open SoundFrame',
+      title: 'Load Track',
       action: {
         type: 'launch_frame',
         name: FARCASTER_MINIAPP_CONFIG.name,
