@@ -177,6 +177,15 @@ function miniAppShellHtml(body: string, headExtras = '') {
         line-height: 1.5;
         color: #c8c8c8;
       }
+      .error {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 85, 0, 0.45);
+        background: rgba(255, 85, 0, 0.12);
+        color: #ffb38a;
+        text-align: left;
+      }
       form {
         margin-top: 20px;
         display: flex;
@@ -210,31 +219,90 @@ function miniAppShellHtml(body: string, headExtras = '') {
 </html>`
 }
 
-const SOUNDCLOUD_URL_FORM_HTML = `
+type FrameUrlError = 'invalid' | 'not_found'
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function soundCloudUrlFormHtml(submittedUrl?: string): string {
+  const valueAttr = submittedUrl
+    ? ` value="${escapeHtmlAttr(submittedUrl)}"`
+    : ''
+  return `
       <form method="GET" action="/frame">
-        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
+        <input name="url" type="url" placeholder="https://soundcloud.com/..." required${valueAttr} />
         <button type="submit">Load Track</button>
       </form>
 `
+}
+
+function frameUrlErrorMessage(error: FrameUrlError): string {
+  if (error === 'invalid') {
+    return "That doesn't look like a valid SoundCloud link. Check the URL and try again."
+  }
+  return 'Track not found. It may be private, removed, or unavailable.'
+}
+
+function playerLandingBody(error?: FrameUrlError, submittedUrl?: string): string {
+  const errorBlock = error
+    ? `<p class="error" role="alert">${frameUrlErrorMessage(error)}</p>`
+    : ''
+  return `
+      <h1>SoundFrame</h1>
+      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
+      ${errorBlock}
+      ${soundCloudUrlFormHtml(submittedUrl)}
+    `
+}
+
+async function resolveFrameUrlSubmission(rawUrl: string): Promise<
+  | { status: 'ok'; trackId: string }
+  | { status: 'invalid' }
+  | { status: 'not_found' }
+> {
+  const extracted = extractSoundCloudUrlFromText(rawUrl)
+  if (!extracted) {
+    return { status: 'invalid' }
+  }
+
+  const canonical = await normalizeSoundCloudInputUrl(extracted)
+  if (!canonical) {
+    return { status: 'invalid' }
+  }
+
+  let parsed: Awaited<ReturnType<typeof parseSoundCloudUrl>>
+  try {
+    parsed = await parseSoundCloudUrl(canonical)
+  } catch {
+    return { status: 'not_found' }
+  }
+
+  if (!parsed.ok || !TRACK_ID_ALPHANUM_RE.test(parsed.trackId)) {
+    return { status: 'not_found' }
+  }
+
+  return { status: 'ok', trackId: parsed.trackId }
+}
 
 export function playerHomeResponse(origin?: string) {
   const headExtras = origin
     ? embedMetaTags(buildPlayerHomeEmbed(origin))
     : ''
   return htmlResponse(
-    miniAppShellHtml(
-      `
-      <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
-      ${SOUNDCLOUD_URL_FORM_HTML}
-    `,
-      headExtras
-    )
+    miniAppShellHtml(playerLandingBody(), headExtras)
   )
 }
 
 /** Mini App HTML for GET /frame — no Frog vNext tags (required for embed preview). */
-export function frameEmbedLandingResponse(origin?: string) {
+export function frameEmbedLandingResponse(
+  origin?: string,
+  options?: { error?: FrameUrlError; submittedUrl?: string }
+) {
   const headExtras = origin
     ? embedMetaTags(
         buildFramePageEmbed(
@@ -247,11 +315,7 @@ export function frameEmbedLandingResponse(origin?: string) {
     : ''
   return htmlResponse(
     miniAppShellHtml(
-      `
-      <h1>SoundFrame</h1>
-      <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
-      ${SOUNDCLOUD_URL_FORM_HTML}
-    `,
+      playerLandingBody(options?.error, options?.submittedUrl),
       headExtras
     )
   )
@@ -266,16 +330,19 @@ export async function handleFrameDocumentRequest(request: Request): Promise<Resp
   const rawUrl = url.searchParams.get('url')?.trim()
 
   if (rawUrl) {
-    const extracted = extractSoundCloudUrlFromText(rawUrl)
-    if (extracted) {
-      const canonical = await normalizeSoundCloudInputUrl(extracted)
-      if (canonical) {
-        const parsed = await parseSoundCloudUrl(canonical)
-        if (parsed.ok && TRACK_ID_ALPHANUM_RE.test(parsed.trackId)) {
-          return Response.redirect(`${origin}/player/${parsed.trackId}`, 302)
-        }
-      }
+    const result = await resolveFrameUrlSubmission(rawUrl)
+    if (result.status === 'ok') {
+      return Response.redirect(`${origin}/player/${result.trackId}`, 302)
     }
+
+    const response = frameEmbedLandingResponse(origin, {
+      error: result.status,
+      submittedUrl: rawUrl,
+    })
+    if (request.method === 'HEAD') {
+      return new Response(null, { status: response.status, headers: response.headers })
+    }
+    return response
   }
 
   const response = frameEmbedLandingResponse(origin)
