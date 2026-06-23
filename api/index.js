@@ -65999,6 +65999,9 @@ function playerTrackResponse(trackId, artworkSrc, origin) {
   const embedTags = origin != null ? embedMetaTags(
     buildPlayerTrackEmbed(origin, parsedParams.data.trackId, artworkSrc)
   ) : "";
+  const trackEmbedUrl = JSON.stringify(
+    `${origin ?? ""}/player/${parsedParams.data.trackId}`
+  );
   return htmlResponse(`<!doctype html>
 <html lang="en">
   <head>
@@ -66101,7 +66104,7 @@ function playerTrackResponse(trackId, artworkSrc, origin) {
 
     <script>
       const CAST_SHARE_TEXT = 'Listening to music on SoundFrame! \u{1F3B5} Check out this track:';
-      const FRAME_EMBED_URL = 'https://soundframe.vercel.app/frame';
+      const TRACK_EMBED_URL = ${trackEmbedUrl};
 
       function buildCastComposeUrl(text, embedUrl) {
         return (
@@ -66114,14 +66117,14 @@ function playerTrackResponse(trackId, artworkSrc, origin) {
 
       async function openCastCompose() {
         try {
-          const embeds = [FRAME_EMBED_URL];
+          const embeds = [TRACK_EMBED_URL];
           if (window.sdk?.actions?.composeCast) {
             console.log('[SoundFrame] composeCast via SDK');
             await window.sdk.actions.composeCast({ text: CAST_SHARE_TEXT, embeds });
             return;
           }
 
-          const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, FRAME_EMBED_URL);
+          const composeUrl = buildCastComposeUrl(CAST_SHARE_TEXT, TRACK_EMBED_URL);
           console.log('[SoundFrame] opening cast intent URL:', composeUrl);
           if (window.sdk?.actions?.openUrl) {
             await window.sdk.actions.openUrl({ url: composeUrl });
