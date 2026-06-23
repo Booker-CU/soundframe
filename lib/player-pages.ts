@@ -1,10 +1,18 @@
 import { z } from 'zod'
 import {
+  buildFramePageEmbed,
   buildPlayerHomeEmbed,
   buildPlayerTrackEmbed,
+  embedFallbackImageUrl,
   embedMetaTags,
 } from './embed.js'
-import { buildSoundCloudPlayerIframeUrl, fetchTrackThumbnailUrl } from './utils/soundcloud.js'
+import {
+  buildSoundCloudPlayerIframeUrl,
+  extractSoundCloudUrlFromText,
+  fetchTrackThumbnailUrl,
+  normalizeSoundCloudInputUrl,
+  parseSoundCloudUrl,
+} from './utils/soundcloud.js'
 import { theme } from './styles/theme.js'
 
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
@@ -169,6 +177,31 @@ function miniAppShellHtml(body: string, headExtras = '') {
         line-height: 1.5;
         color: #c8c8c8;
       }
+      form {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      input[type='url'] {
+        width: 100%;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #1a1a1a;
+        color: #fff;
+        font-size: 16px;
+      }
+      button[type='submit'] {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: ${theme.primary};
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -185,10 +218,72 @@ export function playerHomeResponse(origin?: string) {
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
+      <p>Open a shared player from a cast, or paste a SoundCloud link at <code>/frame</code>.</p>
     `,
       headExtras
     )
+  )
+}
+
+/** Mini App HTML for GET /frame — no Frog vNext tags (required for embed preview). */
+export function frameEmbedLandingResponse(origin?: string) {
+  const headExtras = origin
+    ? embedMetaTags(
+        buildFramePageEmbed(
+          origin,
+          embedFallbackImageUrl(origin),
+          'Load Track',
+          'launch_frame'
+        )
+      )
+    : ''
+  return htmlResponse(
+    miniAppShellHtml(
+      `
+      <h1>SoundFrame</h1>
+      <p>Paste a SoundCloud link to open the player.</p>
+      <form method="GET" action="/frame">
+        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
+        <button type="submit">Load Track</button>
+      </form>
+    `,
+      headExtras
+    )
+  )
+}
+
+const FRAME_DOCUMENT_PATH_RE = /^\/(?:api\/)?frame\/?$/
+
+/** GET/HEAD /frame — embed scrapers must not see Frog's vNext frame tags. */
+export async function handleFrameDocumentRequest(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const origin = url.origin
+  const rawUrl = url.searchParams.get('url')?.trim()
+
+  if (rawUrl) {
+    const extracted = extractSoundCloudUrlFromText(rawUrl)
+    if (extracted) {
+      const canonical = await normalizeSoundCloudInputUrl(extracted)
+      if (canonical) {
+        const parsed = await parseSoundCloudUrl(canonical)
+        if (parsed.ok && TRACK_ID_ALPHANUM_RE.test(parsed.trackId)) {
+          return Response.redirect(`${origin}/player/${parsed.trackId}`, 302)
+        }
+      }
+    }
+  }
+
+  const response = frameEmbedLandingResponse(origin)
+  if (request.method === 'HEAD') {
+    return new Response(null, { status: response.status, headers: response.headers })
+  }
+  return response
+}
+
+export function isFrameDocumentRequest(request: Request, pathname: string): boolean {
+  return (
+    FRAME_DOCUMENT_PATH_RE.test(pathname) &&
+    (request.method === 'GET' || request.method === 'HEAD')
   )
 }
 

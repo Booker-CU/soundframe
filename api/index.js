@@ -65360,150 +65360,6 @@ function date4(params) {
 // node_modules/zod/v4/classic/external.js
 config(en_default());
 
-// lib/manifest.ts
-var FARCASTER_ACCOUNT_ASSOCIATION = {
-  header: "eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ",
-  payload: "eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ",
-  signature: "i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw="
-};
-var FARCASTER_MINIAPP_CONFIG = {
-  version: "1",
-  name: "SoundFrame",
-  description: "Share SoundCloud tracks in Farcaster with an embedded player. Paste a link and play in-app.",
-  subtitle: "SoundCloud for Farcaster",
-  primaryCategory: "music",
-  tags: ["music", "soundcloud", "player"],
-  splashBackgroundColor: "#121212"
-};
-function buildFarcasterManifest(origin) {
-  const base = origin.replace(/\/$/, "");
-  const miniapp = {
-    ...FARCASTER_MINIAPP_CONFIG,
-    iconUrl: `${base}/splash.png`,
-    homeUrl: `${base}/player`,
-    splashImageUrl: `${base}/splash.png`
-  };
-  return {
-    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
-    miniapp,
-    frame: miniapp
-  };
-}
-function isFarcasterManifestRequest(request) {
-  const { pathname } = new URL(request.url);
-  return pathname === "/.well-known/farcaster.json" || pathname === "/api/.well-known/farcaster.json";
-}
-function farcasterManifestResponse(request) {
-  const origin = new URL(request.url).origin;
-  return new Response(JSON.stringify(buildFarcasterManifest(origin)), {
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
-    }
-  });
-}
-
-// lib/embed.ts
-function buildPlayerHomeEmbed(origin) {
-  const base = origin.replace(/\/$/, "");
-  return {
-    version: "1",
-    imageUrl: `${base}/splash.png`,
-    button: {
-      title: "Open SoundFrame",
-      action: {
-        type: "launch_frame",
-        name: FARCASTER_MINIAPP_CONFIG.name,
-        url: `${base}/player`,
-        splashImageUrl: `${base}/splash.png`,
-        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
-      }
-    }
-  };
-}
-function buildPlayerTrackEmbed(origin, trackId, imageUrl) {
-  const base = origin.replace(/\/$/, "");
-  return {
-    version: "1",
-    imageUrl: imageUrl ?? `${base}/splash.png`,
-    button: {
-      title: "Listen",
-      action: {
-        type: "launch_frame",
-        name: FARCASTER_MINIAPP_CONFIG.name,
-        url: `${base}/player/${trackId}`,
-        splashImageUrl: `${base}/splash.png`,
-        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
-      }
-    }
-  };
-}
-function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track", actionType = "launch_miniapp") {
-  const base = origin.replace(/\/$/, "");
-  return {
-    version: "1",
-    imageUrl,
-    button: {
-      title: buttonTitle.slice(0, 32),
-      action: {
-        type: actionType,
-        name: FARCASTER_MINIAPP_CONFIG.name,
-        url: `${base}/frame`,
-        splashImageUrl: `${base}/splash.png`,
-        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
-      }
-    }
-  };
-}
-var EMBED_IMAGE_URL_MAX_LENGTH = 1024;
-function embedFallbackImageUrl(origin) {
-  return `${origin.replace(/\/$/, "")}/embed-card.png`;
-}
-function isValidEmbedImageUrl(imageUrl) {
-  return imageUrl.length > 0 && imageUrl.length <= EMBED_IMAGE_URL_MAX_LENGTH;
-}
-function serializeEmbedForMetaTag(embed) {
-  return JSON.stringify(embed).replace(/'/g, "&#39;");
-}
-function embedMiniappMetaTag(embed) {
-  const json2 = serializeEmbedForMetaTag(embed);
-  return `<meta name="fc:miniapp" content='${json2}' />`;
-}
-function embedMetaTags(embed) {
-  const json2 = serializeEmbedForMetaTag(embed);
-  return `${embedMiniappMetaTag(embed)}
-    <meta name="fc:frame" content='${json2}' />`;
-}
-function readMetaContent(html2, attr, key) {
-  const re3 = new RegExp(`<meta ${attr}="${key}" content="([^"]*)"`, "i");
-  return html2.match(re3)?.[1];
-}
-function resolveFrameEmbedImageUrl(html2, origin) {
-  const ogImage = readMetaContent(html2, "property", "og:image");
-  if (ogImage && isValidEmbedImageUrl(ogImage)) return ogImage;
-  const frameImage = readMetaContent(html2, "property", "fc:frame:image");
-  if (frameImage && isValidEmbedImageUrl(frameImage)) return frameImage;
-  return embedFallbackImageUrl(origin);
-}
-function resolveFrameEmbedButtonTitle(html2) {
-  return readMetaContent(html2, "property", "fc:frame:button:1") ?? "Load Track";
-}
-function embedFramePageMetaTags(origin, imageUrl, buttonTitle) {
-  return embedMetaTags(buildFramePageEmbed(origin, imageUrl, buttonTitle, "launch_frame"));
-}
-function injectFrameEmbedMeta(html2, origin) {
-  if (html2.includes('name="fc:miniapp"')) return html2;
-  const imageUrl = resolveFrameEmbedImageUrl(html2, origin);
-  const buttonTitle = resolveFrameEmbedButtonTitle(html2);
-  const tags = embedFramePageMetaTags(origin, imageUrl, buttonTitle);
-  if (/<head[^>]*>/i.test(html2)) {
-    return html2.replace(/<head([^>]*)>/i, `<head$1>
-    ${tags}`);
-  }
-  return `${tags}
-${html2}`;
-}
-
 // lib/embed-card.tsx
 init_index_node();
 
@@ -65552,6 +65408,49 @@ function embedCardImageResponse() {
       }
     }
   );
+}
+
+// lib/manifest.ts
+var FARCASTER_ACCOUNT_ASSOCIATION = {
+  header: "eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ",
+  payload: "eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ",
+  signature: "i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw="
+};
+var FARCASTER_MINIAPP_CONFIG = {
+  version: "1",
+  name: "SoundFrame",
+  description: "Share SoundCloud tracks in Farcaster with an embedded player. Paste a link and play in-app.",
+  subtitle: "SoundCloud for Farcaster",
+  primaryCategory: "music",
+  tags: ["music", "soundcloud", "player"],
+  splashBackgroundColor: "#121212"
+};
+function buildFarcasterManifest(origin) {
+  const base = origin.replace(/\/$/, "");
+  const miniapp = {
+    ...FARCASTER_MINIAPP_CONFIG,
+    iconUrl: `${base}/splash.png`,
+    homeUrl: `${base}/player`,
+    splashImageUrl: `${base}/splash.png`
+  };
+  return {
+    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
+    miniapp,
+    frame: miniapp
+  };
+}
+function isFarcasterManifestRequest(request) {
+  const { pathname } = new URL(request.url);
+  return pathname === "/.well-known/farcaster.json" || pathname === "/api/.well-known/farcaster.json";
+}
+function farcasterManifestResponse(request) {
+  const origin = new URL(request.url).origin;
+  return new Response(JSON.stringify(buildFarcasterManifest(origin)), {
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
 }
 
 // lib/utils/soundcloud.ts
@@ -65723,6 +65622,74 @@ async function fetchTrackThumbnailUrl(trackId) {
   }
 }
 
+// lib/embed.ts
+function buildPlayerHomeEmbed(origin) {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl: `${base}/splash.png`,
+    button: {
+      title: "Open SoundFrame",
+      action: {
+        type: "launch_frame",
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/player`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
+function buildPlayerTrackEmbed(origin, trackId, imageUrl) {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl: imageUrl ?? `${base}/splash.png`,
+    button: {
+      title: "Listen",
+      action: {
+        type: "launch_frame",
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/player/${trackId}`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
+function buildFramePageEmbed(origin, imageUrl, buttonTitle = "Load Track", actionType = "launch_miniapp") {
+  const base = origin.replace(/\/$/, "");
+  return {
+    version: "1",
+    imageUrl,
+    button: {
+      title: buttonTitle.slice(0, 32),
+      action: {
+        type: actionType,
+        name: FARCASTER_MINIAPP_CONFIG.name,
+        url: `${base}/frame`,
+        splashImageUrl: `${base}/splash.png`,
+        splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor
+      }
+    }
+  };
+}
+function embedFallbackImageUrl(origin) {
+  return `${origin.replace(/\/$/, "")}/embed-card.png`;
+}
+function serializeEmbedForMetaTag(embed) {
+  return JSON.stringify(embed).replace(/'/g, "&#39;");
+}
+function embedMiniappMetaTag(embed) {
+  const json2 = serializeEmbedForMetaTag(embed);
+  return `<meta name="fc:miniapp" content='${json2}' />`;
+}
+function embedMetaTags(embed) {
+  const json2 = serializeEmbedForMetaTag(embed);
+  return `${embedMiniappMetaTag(embed)}
+    <meta name="fc:frame" content='${json2}' />`;
+}
+
 // lib/player-pages.ts
 var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
 var PlayerTrackParamsSchema = external_exports.object({
@@ -65869,6 +65836,31 @@ function miniAppShellHtml(body, headExtras = "") {
         line-height: 1.5;
         color: #c8c8c8;
       }
+      form {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      input[type='url'] {
+        width: 100%;
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #1a1a1a;
+        color: #fff;
+        font-size: 16px;
+      }
+      button[type='submit'] {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: ${theme.primary};
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -65882,11 +65874,60 @@ function playerHomeResponse(origin) {
     miniAppShellHtml(
       `
       <h1>SoundFrame</h1>
-      <p>Open a shared player from a cast. To test the frame, use <code>/frame</code> in Warpcast Developer Tools (Frame tab).</p>
+      <p>Open a shared player from a cast, or paste a SoundCloud link at <code>/frame</code>.</p>
     `,
       headExtras
     )
   );
+}
+function frameEmbedLandingResponse(origin) {
+  const headExtras = origin ? embedMetaTags(
+    buildFramePageEmbed(
+      origin,
+      embedFallbackImageUrl(origin),
+      "Load Track",
+      "launch_frame"
+    )
+  ) : "";
+  return htmlResponse(
+    miniAppShellHtml(
+      `
+      <h1>SoundFrame</h1>
+      <p>Paste a SoundCloud link to open the player.</p>
+      <form method="GET" action="/frame">
+        <input name="url" type="url" placeholder="https://soundcloud.com/..." required />
+        <button type="submit">Load Track</button>
+      </form>
+    `,
+      headExtras
+    )
+  );
+}
+var FRAME_DOCUMENT_PATH_RE = /^\/(?:api\/)?frame\/?$/;
+async function handleFrameDocumentRequest(request) {
+  const url2 = new URL(request.url);
+  const origin = url2.origin;
+  const rawUrl = url2.searchParams.get("url")?.trim();
+  if (rawUrl) {
+    const extracted = extractSoundCloudUrlFromText(rawUrl);
+    if (extracted) {
+      const canonical = await normalizeSoundCloudInputUrl(extracted);
+      if (canonical) {
+        const parsed = await parseSoundCloudUrl(canonical);
+        if (parsed.ok && TRACK_ID_ALPHANUM_RE2.test(parsed.trackId)) {
+          return Response.redirect(`${origin}/player/${parsed.trackId}`, 302);
+        }
+      }
+    }
+  }
+  const response = frameEmbedLandingResponse(origin);
+  if (request.method === "HEAD") {
+    return new Response(null, { status: response.status, headers: response.headers });
+  }
+  return response;
+}
+function isFrameDocumentRequest(request, pathname) {
+  return FRAME_DOCUMENT_PATH_RE.test(pathname) && (request.method === "GET" || request.method === "HEAD");
 }
 function playerTrackNotFoundResponse() {
   return htmlResponse(
@@ -66149,7 +66190,6 @@ var PLAYER_HOME_PATH = "/player";
 var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
 var API_PLAYER_HOME_PATH = "/api/player";
 var API_PLAYER_PATH_RE = /^\/api\/player\/[A-Za-z0-9]+$/;
-var FRAME_HTML_PATH_RE = /^\/(?:api\/)?frame\/?$/;
 function handlePlayerHomeHono(c3) {
   const origin = new URL(c3.req.url).origin;
   return playerHomeResponse(origin);
@@ -66205,15 +66245,10 @@ app.fetch = async (request, env, executionCtx) => {
     }
     return rootHono.fetch(request, env, executionCtx);
   }
-  const response = await frogFetch(request, env, executionCtx);
-  if (FRAME_HTML_PATH_RE.test(pathname) && response.headers.get("content-type")?.includes("text/html")) {
-    const origin = new URL(request.url).origin;
-    const html2 = injectFrameEmbedMeta(await response.text(), origin);
-    const headers = new Headers(response.headers);
-    headers.delete("content-length");
-    return new Response(html2, { status: response.status, headers });
+  if (isFrameDocumentRequest(request, pathname)) {
+    return handleFrameDocumentRequest(request);
   }
-  return response;
+  return frogFetch(request, env, executionCtx);
 };
 app.frame("/frame", async (c3) => {
   const queryUrl = c3.req.query("url");
