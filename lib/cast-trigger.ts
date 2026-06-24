@@ -36,13 +36,10 @@ export async function resolveCastToFrameUrl(
   }
 
   const canonical = await normalizeSoundCloudInputUrl(extracted)
-  if (!canonical) {
-    return { ok: false, error: 'invalid' }
-  }
 
   let parsed: Awaited<ReturnType<typeof parseSoundCloudUrl>>
   try {
-    parsed = await parseSoundCloudUrl(canonical)
+    parsed = await parseSoundCloudUrl(extracted)
   } catch {
     return { ok: false, error: 'not_found' }
   }
@@ -51,9 +48,13 @@ export async function resolveCastToFrameUrl(
     return { ok: false, error: 'not_found' }
   }
 
-  const frameUrl = new URL('/frame', origin)
-  frameUrl.searchParams.set('url', canonical)
-  return { ok: true, frameUrl: frameUrl.toString() }
+  if (canonical) {
+    const frameUrl = new URL('/frame', origin)
+    frameUrl.searchParams.set('url', canonical)
+    return { ok: true, frameUrl: frameUrl.toString() }
+  }
+
+  return { ok: true, frameUrl: `${origin.replace(/\/$/, '')}/player/${parsed.trackId}` }
 }
 
 function jsonResponse(body: unknown, status = 200) {
@@ -112,15 +113,7 @@ function castTriggerErrorMessage(error: 'invalid' | 'not_found'): string {
   if (error === 'invalid') {
     return 'No SoundCloud link was found in this cast.'
   }
-  return 'The SoundCloud link in this cast could not be resolved. It may be private or removed.'
-}
-
-function castTriggerReadyScript() {
-  return `<script type="module">
-import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
-window.sdk = sdk
-await sdk.actions.ready()
-</script>`
+  return 'The SoundCloud link in this cast could not be resolved. It may be private, removed, or a mobile link SoundCloud blocked.'
 }
 
 export function castTriggerPageResponse(origin: string) {
@@ -136,7 +129,6 @@ export function castTriggerPageResponse(origin: string) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
-    ${castTriggerReadyScript()}
     <style>
       :root { color-scheme: dark; }
       body {
@@ -204,11 +196,15 @@ export function castTriggerPageResponse(origin: string) {
       <button id="retry" class="hidden" type="button">Try again</button>
     </main>
     <script type="module">
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+
       const RESOLVE_URL = ${resolveUrl}
       const intro = document.getElementById('intro')
       const status = document.getElementById('status')
       const error = document.getElementById('error')
       const retry = document.getElementById('retry')
+
+      window.sdk = sdk
 
       function showError(message) {
         intro.textContent = 'Could not create a SoundFrame'
@@ -218,12 +214,8 @@ export function castTriggerPageResponse(origin: string) {
         retry.classList.remove('hidden')
       }
 
-      function getSdk() {
-        return window.sdk ?? null
-      }
-
-      function readCastContext(sdk) {
-        const location = sdk?.context?.location
+      function readCastContext(sdkRef) {
+        const location = sdkRef?.context?.location
         if (!location) return null
 
         if (
@@ -251,13 +243,18 @@ export function castTriggerPageResponse(origin: string) {
         return urls
       }
 
-      async function waitForCastContext(sdk, attempts = 20) {
+      function castContentReady(castContent) {
+        if (!castContent) return false
+        return [castContent.text, ...castContent.embeds].join(' ').trim().length > 0
+      }
+
+      async function waitForCastContext(sdkRef, attempts = 50) {
         for (let i = 0; i < attempts; i += 1) {
-          const castContent = readCastContext(sdk)
-          if (castContent) return castContent
+          const castContent = readCastContext(sdkRef)
+          if (castContentReady(castContent)) return castContent
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
-        return null
+        return readCastContext(sdkRef)
       }
 
       async function resolveCastFrame(castContent) {
@@ -266,6 +263,9 @@ export function castTriggerPageResponse(origin: string) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(castContent),
         })
+        if (!response.ok) {
+          throw new Error('resolve_failed_' + response.status)
+        }
         return response.json()
       }
 
@@ -275,16 +275,15 @@ export function castTriggerPageResponse(origin: string) {
         retry.classList.add('hidden')
         status.textContent = 'Checking this cast for SoundCloud links…'
 
-        const sdk = getSdk()
-        if (!sdk) {
-          showError('SoundFrame needs to be opened from the Share menu on a cast in Warpcast.')
-          retry.disabled = false
-          return
+        try {
+          await sdk.actions.ready()
+        } catch (err) {
+          console.error('[SoundFrame] ready() failed:', err)
         }
 
         const castContent = await waitForCastContext(sdk)
-        if (!castContent) {
-          showError('Share a cast to SoundFrame from the cast Share menu (not the ⋯ menu).')
+        if (!castContentReady(castContent)) {
+          showError('Could not read the shared cast yet. Wait a moment, then tap Try again.')
           retry.disabled = false
           return
         }
@@ -317,9 +316,13 @@ export function castTriggerPageResponse(origin: string) {
           if (!composeResult?.cast) {
             intro.textContent = 'Cancelled'
             status.textContent = 'No cast was created.'
+            error.classList.add('hidden')
+            retry.classList.add('hidden')
           } else {
             intro.textContent = 'SoundFrame ready'
             status.textContent = 'Your cast composer was opened with the Listen frame.'
+            error.classList.add('hidden')
+            retry.classList.add('hidden')
           }
         } catch (err) {
           console.error('[SoundFrame] cast trigger failed:', err)

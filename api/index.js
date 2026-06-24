@@ -65472,10 +65472,19 @@ var TrackIdSchema = external_exports.string().regex(TRACK_ID_ALPHANUM_RE, {
 var SoundCloudUrlSchema = external_exports.string().url({
   message: "Invalid URL."
 });
-function assertSoundCloudCanonicalHostname(inputUrl) {
-  if (!SOUND_CLOUD_CANONICAL_HOSTS.has(inputUrl.hostname)) {
-    throw new Error("Invalid SoundCloud hostname.");
+function extractTrackIdFromApiUrl(inputUrlRaw) {
+  try {
+    const inputUrl = new URL(inputUrlRaw);
+    if (inputUrl.hostname !== "api.soundcloud.com") return null;
+    const match2 = inputUrl.pathname.match(/^\/tracks\/([A-Za-z0-9]+)/);
+    if (!match2?.[1]) return null;
+    return TrackIdSchema.parse(match2[1]);
+  } catch {
+    return null;
   }
+}
+function isSoundCloudHostname(hostname3) {
+  return SOUND_CLOUD_CANONICAL_HOSTS.has(hostname3) || SOUND_CLOUD_SHORT_LINK_HOSTS.has(hostname3) || hostname3 === "api.soundcloud.com" || hostname3.endsWith(".soundcloud.com");
 }
 function trimTrailingUrlPunctuation(url2) {
   return url2.replace(/[)\]},.!?;:]+$/, "");
@@ -65516,7 +65525,10 @@ async function normalizeSoundCloudInputUrl(inputUrlRaw) {
     const res = await fetch(inputUrlStr, {
       method: "GET",
       redirect: "follow",
-      headers: { accept: "text/html" }
+      headers: {
+        accept: "text/html",
+        "user-agent": "SoundFrame/1.0 (compatible; Farcaster Mini App)"
+      }
     });
     if (!res.ok) return null;
     const finalUrl = new URL(res.url);
@@ -65543,7 +65555,9 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw) {
   try {
     const inputUrlStr = SoundCloudUrlSchema.parse(inputUrlRaw);
     const inputUrl = new URL(inputUrlStr);
-    assertSoundCloudCanonicalHostname(inputUrl);
+    if (!isSoundCloudHostname(inputUrl.hostname)) {
+      throw new Error("Invalid SoundCloud hostname.");
+    }
     const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`;
     const res = await fetch(oEmbedUrl, {
       method: "GET",
@@ -65585,15 +65599,28 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw) {
   }
 }
 async function parseSoundCloudUrl(inputUrlRaw) {
+  const apiTrackId = extractTrackIdFromApiUrl(inputUrlRaw);
+  if (apiTrackId) {
+    return { ok: true, trackId: apiTrackId };
+  }
   const canonicalUrl = await normalizeSoundCloudInputUrl(inputUrlRaw);
-  if (!canonicalUrl) {
-    return { ok: false, error: "unresolvable" };
+  if (canonicalUrl) {
+    const trackId = await resolveSoundCloudTrackIdViaOEmbed(canonicalUrl);
+    if (trackId) {
+      return { ok: true, trackId };
+    }
   }
-  const trackId = await resolveSoundCloudTrackIdViaOEmbed(canonicalUrl);
-  if (!trackId) {
-    return { ok: false, error: "unresolvable" };
+  try {
+    const host = new URL(inputUrlRaw).hostname;
+    if (isSoundCloudHostname(host)) {
+      const trackId = await resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw);
+      if (trackId) {
+        return { ok: true, trackId };
+      }
+    }
+  } catch {
   }
-  return { ok: true, trackId };
+  return { ok: false, error: "unresolvable" };
 }
 function normalizeColorHex(colorHexRaw) {
   const color = colorHexRaw.trim();
@@ -65658,21 +65685,21 @@ async function resolveCastToFrameUrl(origin, text, embeds = []) {
     return { ok: false, error: "invalid" };
   }
   const canonical = await normalizeSoundCloudInputUrl(extracted);
-  if (!canonical) {
-    return { ok: false, error: "invalid" };
-  }
   let parsed;
   try {
-    parsed = await parseSoundCloudUrl(canonical);
+    parsed = await parseSoundCloudUrl(extracted);
   } catch {
     return { ok: false, error: "not_found" };
   }
   if (!parsed.ok || !TRACK_ID_ALPHANUM_RE2.test(parsed.trackId)) {
     return { ok: false, error: "not_found" };
   }
-  const frameUrl = new URL("/frame", origin);
-  frameUrl.searchParams.set("url", canonical);
-  return { ok: true, frameUrl: frameUrl.toString() };
+  if (canonical) {
+    const frameUrl = new URL("/frame", origin);
+    frameUrl.searchParams.set("url", canonical);
+    return { ok: true, frameUrl: frameUrl.toString() };
+  }
+  return { ok: true, frameUrl: `${origin.replace(/\/$/, "")}/player/${parsed.trackId}` };
 }
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -65722,14 +65749,7 @@ function castTriggerErrorMessage(error48) {
   if (error48 === "invalid") {
     return "No SoundCloud link was found in this cast.";
   }
-  return "The SoundCloud link in this cast could not be resolved. It may be private or removed.";
-}
-function castTriggerReadyScript() {
-  return `<script type="module">
-import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
-window.sdk = sdk
-await sdk.actions.ready()
-</script>`;
+  return "The SoundCloud link in this cast could not be resolved. It may be private, removed, or a mobile link SoundCloud blocked.";
 }
 function castTriggerPageResponse(origin) {
   const resolveUrl = JSON.stringify(`${origin}/triggers/cast/resolve`);
@@ -65743,7 +65763,6 @@ function castTriggerPageResponse(origin) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
-    ${castTriggerReadyScript()}
     <style>
       :root { color-scheme: dark; }
       body {
@@ -65811,11 +65830,15 @@ function castTriggerPageResponse(origin) {
       <button id="retry" class="hidden" type="button">Try again</button>
     </main>
     <script type="module">
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+
       const RESOLVE_URL = ${resolveUrl}
       const intro = document.getElementById('intro')
       const status = document.getElementById('status')
       const error = document.getElementById('error')
       const retry = document.getElementById('retry')
+
+      window.sdk = sdk
 
       function showError(message) {
         intro.textContent = 'Could not create a SoundFrame'
@@ -65825,12 +65848,8 @@ function castTriggerPageResponse(origin) {
         retry.classList.remove('hidden')
       }
 
-      function getSdk() {
-        return window.sdk ?? null
-      }
-
-      function readCastContext(sdk) {
-        const location = sdk?.context?.location
+      function readCastContext(sdkRef) {
+        const location = sdkRef?.context?.location
         if (!location) return null
 
         if (
@@ -65858,13 +65877,18 @@ function castTriggerPageResponse(origin) {
         return urls
       }
 
-      async function waitForCastContext(sdk, attempts = 20) {
+      function castContentReady(castContent) {
+        if (!castContent) return false
+        return [castContent.text, ...castContent.embeds].join(' ').trim().length > 0
+      }
+
+      async function waitForCastContext(sdkRef, attempts = 50) {
         for (let i = 0; i < attempts; i += 1) {
-          const castContent = readCastContext(sdk)
-          if (castContent) return castContent
+          const castContent = readCastContext(sdkRef)
+          if (castContentReady(castContent)) return castContent
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
-        return null
+        return readCastContext(sdkRef)
       }
 
       async function resolveCastFrame(castContent) {
@@ -65873,6 +65897,9 @@ function castTriggerPageResponse(origin) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(castContent),
         })
+        if (!response.ok) {
+          throw new Error('resolve_failed_' + response.status)
+        }
         return response.json()
       }
 
@@ -65882,16 +65909,15 @@ function castTriggerPageResponse(origin) {
         retry.classList.add('hidden')
         status.textContent = 'Checking this cast for SoundCloud links\u2026'
 
-        const sdk = getSdk()
-        if (!sdk) {
-          showError('SoundFrame needs to be opened from the Share menu on a cast in Warpcast.')
-          retry.disabled = false
-          return
+        try {
+          await sdk.actions.ready()
+        } catch (err) {
+          console.error('[SoundFrame] ready() failed:', err)
         }
 
         const castContent = await waitForCastContext(sdk)
-        if (!castContent) {
-          showError('Share a cast to SoundFrame from the cast Share menu (not the \u22EF menu).')
+        if (!castContentReady(castContent)) {
+          showError('Could not read the shared cast yet. Wait a moment, then tap Try again.')
           retry.disabled = false
           return
         }
@@ -65924,9 +65950,13 @@ function castTriggerPageResponse(origin) {
           if (!composeResult?.cast) {
             intro.textContent = 'Cancelled'
             status.textContent = 'No cast was created.'
+            error.classList.add('hidden')
+            retry.classList.add('hidden')
           } else {
             intro.textContent = 'SoundFrame ready'
             status.textContent = 'Your cast composer was opened with the Listen frame.'
+            error.classList.add('hidden')
+            retry.classList.add('hidden')
           }
         } catch (err) {
           console.error('[SoundFrame] cast trigger failed:', err)

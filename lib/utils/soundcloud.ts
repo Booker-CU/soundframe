@@ -19,10 +19,25 @@ const SoundCloudUrlSchema = z
     message: 'Invalid URL.',
   })
 
-function assertSoundCloudCanonicalHostname(inputUrl: URL) {
-  if (!SOUND_CLOUD_CANONICAL_HOSTS.has(inputUrl.hostname)) {
-    throw new Error('Invalid SoundCloud hostname.')
+function extractTrackIdFromApiUrl(inputUrlRaw: string): string | null {
+  try {
+    const inputUrl = new URL(inputUrlRaw)
+    if (inputUrl.hostname !== 'api.soundcloud.com') return null
+    const match = inputUrl.pathname.match(/^\/tracks\/([A-Za-z0-9]+)/)
+    if (!match?.[1]) return null
+    return TrackIdSchema.parse(match[1])
+  } catch {
+    return null
   }
+}
+
+function isSoundCloudHostname(hostname: string): boolean {
+  return (
+    SOUND_CLOUD_CANONICAL_HOSTS.has(hostname) ||
+    SOUND_CLOUD_SHORT_LINK_HOSTS.has(hostname) ||
+    hostname === 'api.soundcloud.com' ||
+    hostname.endsWith('.soundcloud.com')
+  )
 }
 
 function trimTrailingUrlPunctuation(url: string): string {
@@ -83,7 +98,10 @@ export async function normalizeSoundCloudInputUrl(inputUrlRaw: string): Promise<
     const res = await fetch(inputUrlStr, {
       method: 'GET',
       redirect: 'follow',
-      headers: { accept: 'text/html' },
+      headers: {
+        accept: 'text/html',
+        'user-agent': 'SoundFrame/1.0 (compatible; Farcaster Mini App)',
+      },
     })
     if (!res.ok) return null
 
@@ -136,7 +154,9 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<s
     const inputUrl = new URL(inputUrlStr)
 
     // Guardrail: verify hostname before any fetch.
-    assertSoundCloudCanonicalHostname(inputUrl)
+    if (!isSoundCloudHostname(inputUrl.hostname)) {
+      throw new Error('Invalid SoundCloud hostname.')
+    }
 
     const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(inputUrlStr)}&format=json`
     const res = await fetch(oEmbedUrl, {
@@ -202,18 +222,32 @@ async function resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw: string): Promise<s
  * - `{ ok: false, error: 'unresolvable' }` when the track cannot be resolved (invalid/private/etc).
  */
 export async function parseSoundCloudUrl(inputUrlRaw: string): Promise<ParseSoundCloudUrlResult> {
+  const apiTrackId = extractTrackIdFromApiUrl(inputUrlRaw)
+  if (apiTrackId) {
+    return { ok: true, trackId: apiTrackId }
+  }
+
   const canonicalUrl = await normalizeSoundCloudInputUrl(inputUrlRaw)
-  if (!canonicalUrl) {
-    return { ok: false, error: 'unresolvable' }
+  if (canonicalUrl) {
+    const trackId = await resolveSoundCloudTrackIdViaOEmbed(canonicalUrl)
+    if (trackId) {
+      return { ok: true, trackId }
+    }
   }
 
-  const trackId = await resolveSoundCloudTrackIdViaOEmbed(canonicalUrl)
-
-  if (!trackId) {
-    return { ok: false, error: 'unresolvable' }
+  try {
+    const host = new URL(inputUrlRaw).hostname
+    if (isSoundCloudHostname(host)) {
+      const trackId = await resolveSoundCloudTrackIdViaOEmbed(inputUrlRaw)
+      if (trackId) {
+        return { ok: true, trackId }
+      }
+    }
+  } catch {
+    // Fall through to unresolvable.
   }
 
-  return { ok: true, trackId }
+  return { ok: false, error: 'unresolvable' }
 }
 
 function normalizeColorHex(colorHexRaw: string): string {
