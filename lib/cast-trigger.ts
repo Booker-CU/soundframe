@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { fetchCastFromWarpcast } from './cast-fetch.js'
 import {
   extractSoundCloudUrlFromCastContent,
   normalizeSoundCloudInputUrl,
@@ -19,7 +20,26 @@ const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
 const CastResolveBodySchema = z.object({
   text: z.string().max(32_000).default(''),
   embeds: z.array(z.string().max(2048)).max(10).default([]),
+  castHash: z.string().regex(/^0x[a-fA-F0-9]+$/).optional(),
+  castFid: z.coerce.number().int().positive().optional(),
 })
+
+async function resolveCastContent(input: z.infer<typeof CastResolveBodySchema>): Promise<{
+  text: string
+  embeds: string[]
+} | null> {
+  const text = input.text.trim()
+  const embeds = input.embeds
+  if (text || embeds.length > 0) {
+    return { text: input.text, embeds }
+  }
+
+  if (input.castHash && input.castFid) {
+    return fetchCastFromWarpcast(input.castFid, input.castHash)
+  }
+
+  return null
+}
 
 export type CastResolveResult =
   | { ok: true; frameUrl: string }
@@ -96,10 +116,15 @@ export async function handleCastTriggerResolveRequest(request: Request): Promise
   }
 
   const origin = new URL(request.url).origin
+  const castContent = await resolveCastContent(parsedBody.data)
+  if (!castContent) {
+    return jsonResponse({ ok: false, error: 'invalid' })
+  }
+
   const result = await resolveCastToFrameUrl(
     origin,
-    parsedBody.data.text,
-    parsedBody.data.embeds
+    castContent.text,
+    castContent.embeds
   )
 
   if (!result.ok) {
@@ -214,8 +239,19 @@ export function castTriggerPageResponse(origin: string) {
         retry.classList.remove('hidden')
       }
 
-      function readCastContext(sdkRef) {
-        const location = sdkRef?.context?.location
+      function readCastShareParams() {
+        const params = new URLSearchParams(window.location.search)
+        const castHash = params.get('castHash')
+        const castFid = params.get('castFid')
+        if (!castHash || !castFid) return null
+        const fid = Number(castFid)
+        if (!Number.isFinite(fid) || fid <= 0) return null
+        return { castHash, castFid: fid }
+      }
+
+      async function readCastContext(sdkRef) {
+        const context = await Promise.resolve(sdkRef.context)
+        const location = context?.location
         if (!location) return null
 
         if (
@@ -248,20 +284,36 @@ export function castTriggerPageResponse(origin: string) {
         return [castContent.text, ...castContent.embeds].join(' ').trim().length > 0
       }
 
-      async function waitForCastContext(sdkRef, attempts = 50) {
+      async function waitForCastContext(sdkRef, attempts = 30) {
         for (let i = 0; i < attempts; i += 1) {
-          const castContent = readCastContext(sdkRef)
+          const castContent = await readCastContext(sdkRef)
           if (castContentReady(castContent)) return castContent
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
         return readCastContext(sdkRef)
       }
 
-      async function resolveCastFrame(castContent) {
+      function buildResolvePayload(shareParams, castContent) {
+        const payload = {
+          text: castContent?.text ?? '',
+          embeds: castContent?.embeds ?? [],
+        }
+        if (shareParams) {
+          payload.castHash = shareParams.castHash
+          payload.castFid = shareParams.castFid
+        }
+        return payload
+      }
+
+      function canResolveCast(shareParams, castContent) {
+        return Boolean(shareParams) || castContentReady(castContent)
+      }
+
+      async function resolveCastFrame(payload) {
         const response = await fetch(RESOLVE_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(castContent),
+          body: JSON.stringify(payload),
         })
         if (!response.ok) {
           throw new Error('resolve_failed_' + response.status)
@@ -281,15 +333,18 @@ export function castTriggerPageResponse(origin: string) {
           console.error('[SoundFrame] ready() failed:', err)
         }
 
+        const shareParams = readCastShareParams()
         const castContent = await waitForCastContext(sdk)
-        if (!castContentReady(castContent)) {
-          showError('Could not read the shared cast yet. Wait a moment, then tap Try again.')
+        const payload = buildResolvePayload(shareParams, castContent)
+
+        if (!canResolveCast(shareParams, castContent)) {
+          showError('Could not read the shared cast. Share from a cast in Warpcast and try again.')
           retry.disabled = false
           return
         }
 
         try {
-          const result = await resolveCastFrame(castContent)
+          const result = await resolveCastFrame(payload)
           if (!result?.ok || typeof result.frameUrl !== 'string') {
             const messages = {
               invalid: ${JSON.stringify(castTriggerErrorMessage('invalid'))},
