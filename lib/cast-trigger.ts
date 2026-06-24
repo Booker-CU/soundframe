@@ -115,6 +115,14 @@ function castTriggerErrorMessage(error: 'invalid' | 'not_found'): string {
   return 'The SoundCloud link in this cast could not be resolved. It may be private or removed.'
 }
 
+function castTriggerReadyScript() {
+  return `<script type="module">
+import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+window.sdk = sdk
+await sdk.actions.ready()
+</script>`
+}
+
 export function castTriggerPageResponse(origin: string) {
   const resolveUrl = JSON.stringify(`${origin}/triggers/cast/resolve`)
 
@@ -128,7 +136,7 @@ export function castTriggerPageResponse(origin: string) {
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
-    <script src="/miniapp-sdk.js"></script>
+    ${castTriggerReadyScript()}
     <style>
       :root { color-scheme: dark; }
       body {
@@ -211,36 +219,44 @@ export function castTriggerPageResponse(origin: string) {
       }
 
       function getSdk() {
-        if (window.sdk) return window.sdk
-        if (typeof miniapp !== 'undefined' && miniapp.sdk) {
-          window.sdk = miniapp.sdk
-          return miniapp.sdk
-        }
-        return null
+        return window.sdk ?? null
       }
 
       function readCastContext(sdk) {
         const location = sdk?.context?.location
         if (!location) return null
 
-        if (location.type === 'cast' && location.cast) {
+        if (
+          (location.type === 'cast' || location.type === 'cast_share') &&
+          location.cast
+        ) {
           return {
             text: typeof location.cast.text === 'string' ? location.cast.text : '',
-            embeds: Array.isArray(location.cast.embeds)
-              ? location.cast.embeds.filter((item) => typeof item === 'string')
-              : [],
+            embeds: normalizeCastEmbeds(location.cast.embeds),
           }
         }
 
-        if (location.type === 'cast_share' && location.cast) {
-          return {
-            text: typeof location.cast.text === 'string' ? location.cast.text : '',
-            embeds: Array.isArray(location.cast.embeds)
-              ? location.cast.embeds.filter((item) => typeof item === 'string')
-              : [],
+        return null
+      }
+
+      function normalizeCastEmbeds(embeds) {
+        if (!Array.isArray(embeds)) return []
+        const urls = []
+        for (const item of embeds) {
+          if (typeof item === 'string') urls.push(item)
+          else if (item && typeof item === 'object' && typeof item.url === 'string') {
+            urls.push(item.url)
           }
         }
+        return urls
+      }
 
+      async function waitForCastContext(sdk, attempts = 20) {
+        for (let i = 0; i < attempts; i += 1) {
+          const castContent = readCastContext(sdk)
+          if (castContent) return castContent
+          await new Promise((resolve) => setTimeout(resolve, 100))
+        }
         return null
       }
 
@@ -266,13 +282,7 @@ export function castTriggerPageResponse(origin: string) {
           return
         }
 
-        try {
-          await sdk.actions.ready()
-        } catch (err) {
-          console.error('[SoundFrame] ready() failed:', err)
-        }
-
-        const castContent = readCastContext(sdk)
+        const castContent = await waitForCastContext(sdk)
         if (!castContent) {
           showError('Share a cast to SoundFrame from the cast Share menu (not the ⋯ menu).')
           retry.disabled = false

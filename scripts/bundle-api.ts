@@ -80,7 +80,7 @@ writeFileSync('api/player/[trackId].js', "export { default, GET, POST } from '..
 writeFileSync('api/embed-card.js', "export { default, GET, POST } from './index.js'\n")
 
 mkdirSync('api/triggers/cast', { recursive: true })
-writeFileSync('api/triggers/cast.js', "export { default, GET, POST } from '../../index.js'\n")
+writeFileSync('api/triggers/cast.js', "export { default, GET, POST } from '../index.js'\n")
 writeFileSync(
   'api/triggers/cast/resolve.js',
   "export { default, GET, POST } from '../../index.js'\n"

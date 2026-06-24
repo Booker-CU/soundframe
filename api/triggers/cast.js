@@ -1,1 +1,1 @@
-export { default, GET, POST } from '../../index.js'
+export { default, GET, POST } from '../index.js'
