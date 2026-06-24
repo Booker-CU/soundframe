@@ -65643,6 +65643,10 @@ async function fetchTrackThumbnailUrl(trackId) {
 // lib/cast-trigger.ts
 var CAST_TRIGGER_ID = "soundframe-from-cast";
 var CAST_TRIGGER_NAME = "Open in SoundFrame";
+function castShareUrl(origin) {
+  const base = origin.replace(/\/$/, "");
+  return `${base}/triggers/cast`;
+}
 var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
 var CastResolveBodySchema = external_exports.object({
   text: external_exports.string().max(32e3).default(""),
@@ -65865,7 +65869,7 @@ function castTriggerPageResponse(origin) {
 
         const sdk = getSdk()
         if (!sdk) {
-          showError('SoundFrame needs to be opened from a cast action in Warpcast.')
+          showError('SoundFrame needs to be opened from the Share menu on a cast in Warpcast.')
           retry.disabled = false
           return
         }
@@ -65878,7 +65882,7 @@ function castTriggerPageResponse(origin) {
 
         const castContent = readCastContext(sdk)
         if (!castContent) {
-          showError('Open SoundFrame from the actions menu on a cast that contains a SoundCloud link.')
+          showError('Share a cast to SoundFrame from the cast Share menu (not the \u22EF menu).')
           retry.disabled = false
           return
         }
@@ -65967,7 +65971,8 @@ function buildFarcasterManifest(origin) {
     ...FARCASTER_MINIAPP_CONFIG,
     iconUrl: `${base}/splash.png`,
     homeUrl: `${base}/player`,
-    splashImageUrl: `${base}/splash.png`
+    splashImageUrl: `${base}/splash.png`,
+    castShareUrl: castShareUrl(origin)
   };
   return {
     accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,

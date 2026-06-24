@@ -9,6 +9,11 @@ import { theme } from './styles/theme.js'
 export const CAST_TRIGGER_ID = 'soundframe-from-cast'
 export const CAST_TRIGGER_NAME = 'Open in SoundFrame'
 
+export function castShareUrl(origin: string): string {
+  const base = origin.replace(/\/$/, '')
+  return `${base}/triggers/cast`
+}
+
 const TRACK_ID_ALPHANUM_RE = /^[A-Za-z0-9]+$/
 
 const CastResolveBodySchema = z.object({
@@ -256,7 +261,7 @@ export function castTriggerPageResponse(origin: string) {
 
         const sdk = getSdk()
         if (!sdk) {
-          showError('SoundFrame needs to be opened from a cast action in Warpcast.')
+          showError('SoundFrame needs to be opened from the Share menu on a cast in Warpcast.')
           retry.disabled = false
           return
         }
@@ -269,7 +274,7 @@ export function castTriggerPageResponse(origin: string) {
 
         const castContent = readCastContext(sdk)
         if (!castContent) {
-          showError('Open SoundFrame from the actions menu on a cast that contains a SoundCloud link.')
+          showError('Share a cast to SoundFrame from the cast Share menu (not the ⋯ menu).')
           retry.disabled = false
           return
         }

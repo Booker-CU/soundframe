@@ -5,6 +5,7 @@
 import {
   CAST_TRIGGER_ID,
   CAST_TRIGGER_NAME,
+  castShareUrl,
 } from './cast-trigger.js'
 
 export const FARCASTER_ACCOUNT_ASSOCIATION = {
@@ -33,6 +34,7 @@ export function buildFarcasterManifest(origin: string) {
     iconUrl: `${base}/splash.png`,
     homeUrl: `${base}/player`,
     splashImageUrl: `${base}/splash.png`,
+    castShareUrl: castShareUrl(origin),
   }
   return {
     accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
