@@ -65539,8 +65539,7 @@ function extractSoundCloudUrlFromText(text) {
   if (scMatches?.length) {
     return trimTrailingUrlPunctuation(scMatches[scMatches.length - 1]);
   }
-  const urlMatch = normalized.match(/https?:\/\/[^\s<>"']+/);
-  return urlMatch ? trimTrailingUrlPunctuation(urlMatch[0]) : null;
+  return null;
 }
 function extractSoundCloudUrlFromCastContent(text, embeds = []) {
   const fromText = extractSoundCloudUrlFromText(text);

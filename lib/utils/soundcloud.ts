@@ -54,8 +54,7 @@ export function extractSoundCloudUrlFromText(text: string): string | null {
   if (scMatches?.length) {
     return trimTrailingUrlPunctuation(scMatches[scMatches.length - 1])
   }
-  const urlMatch = normalized.match(/https?:\/\/[^\s<>"']+/)
-  return urlMatch ? trimTrailingUrlPunctuation(urlMatch[0]) : null
+  return null
 }
 
 /** Scan cast body text and embed URLs for the first SoundCloud link. */
