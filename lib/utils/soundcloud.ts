@@ -43,6 +43,22 @@ export function extractSoundCloudUrlFromText(text: string): string | null {
   return urlMatch ? trimTrailingUrlPunctuation(urlMatch[0]) : null
 }
 
+/** Scan cast body text and embed URLs for the first SoundCloud link. */
+export function extractSoundCloudUrlFromCastContent(
+  text: string,
+  embeds: string[] = []
+): string | null {
+  const fromText = extractSoundCloudUrlFromText(text)
+  if (fromText) return fromText
+
+  for (const embed of embeds) {
+    const fromEmbed = extractSoundCloudUrlFromText(embed)
+    if (fromEmbed) return fromEmbed
+  }
+
+  return null
+}
+
 /**
  * Returns a canonical soundcloud.com track URL, following mobile share short links when needed.
  */

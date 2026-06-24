@@ -6,7 +6,9 @@ function normalizeRequestUrl(request: Request): Request {
     url.pathname === '/frame' ||
     url.pathname.startsWith('/frame/') ||
     url.pathname === '/player' ||
-    url.pathname.startsWith('/player/')
+    url.pathname.startsWith('/player/') ||
+    url.pathname === '/triggers/cast' ||
+    url.pathname.startsWith('/triggers/')
   ) {
     url.pathname = `/api${url.pathname}`
     return new Request(url, request)

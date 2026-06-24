@@ -65462,49 +65462,6 @@ function embedCardImageResponse() {
   );
 }
 
-// lib/manifest.ts
-var FARCASTER_ACCOUNT_ASSOCIATION = {
-  header: "eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ",
-  payload: "eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ",
-  signature: "i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw="
-};
-var FARCASTER_MINIAPP_CONFIG = {
-  version: "1",
-  name: "SoundFrame",
-  description: "Share SoundCloud tracks in Farcaster with an embedded player. Paste a link and play in-app.",
-  subtitle: "SoundCloud for Farcaster",
-  primaryCategory: "music",
-  tags: ["music", "soundcloud", "player"],
-  splashBackgroundColor: "#121212"
-};
-function buildFarcasterManifest(origin) {
-  const base = origin.replace(/\/$/, "");
-  const miniapp = {
-    ...FARCASTER_MINIAPP_CONFIG,
-    iconUrl: `${base}/splash.png`,
-    homeUrl: `${base}/player`,
-    splashImageUrl: `${base}/splash.png`
-  };
-  return {
-    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
-    miniapp,
-    frame: miniapp
-  };
-}
-function isFarcasterManifestRequest(request) {
-  const { pathname } = new URL(request.url);
-  return pathname === "/.well-known/farcaster.json" || pathname === "/api/.well-known/farcaster.json";
-}
-function farcasterManifestResponse(request) {
-  const origin = new URL(request.url).origin;
-  return new Response(JSON.stringify(buildFarcasterManifest(origin)), {
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*"
-    }
-  });
-}
-
 // lib/utils/soundcloud.ts
 var SOUND_CLOUD_CANONICAL_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
 var SOUND_CLOUD_SHORT_LINK_HOSTS = /* @__PURE__ */ new Set(["on.soundcloud.com"]);
@@ -65531,6 +65488,15 @@ function extractSoundCloudUrlFromText(text) {
   }
   const urlMatch = normalized.match(/https?:\/\/[^\s<>"']+/);
   return urlMatch ? trimTrailingUrlPunctuation(urlMatch[0]) : null;
+}
+function extractSoundCloudUrlFromCastContent(text, embeds = []) {
+  const fromText = extractSoundCloudUrlFromText(text);
+  if (fromText) return fromText;
+  for (const embed of embeds) {
+    const fromEmbed = extractSoundCloudUrlFromText(embed);
+    if (fromEmbed) return fromEmbed;
+  }
+  return null;
 }
 async function normalizeSoundCloudInputUrl(inputUrlRaw) {
   let inputUrlStr;
@@ -65674,6 +65640,363 @@ async function fetchTrackThumbnailUrl(trackId) {
   }
 }
 
+// lib/cast-trigger.ts
+var CAST_TRIGGER_ID = "soundframe-from-cast";
+var CAST_TRIGGER_NAME = "Open in SoundFrame";
+var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
+var CastResolveBodySchema = external_exports.object({
+  text: external_exports.string().max(32e3).default(""),
+  embeds: external_exports.array(external_exports.string().max(2048)).max(10).default([])
+});
+async function resolveCastToFrameUrl(origin, text, embeds = []) {
+  const extracted = extractSoundCloudUrlFromCastContent(text, embeds);
+  if (!extracted) {
+    return { ok: false, error: "invalid" };
+  }
+  const canonical = await normalizeSoundCloudInputUrl(extracted);
+  if (!canonical) {
+    return { ok: false, error: "invalid" };
+  }
+  let parsed;
+  try {
+    parsed = await parseSoundCloudUrl(canonical);
+  } catch {
+    return { ok: false, error: "not_found" };
+  }
+  if (!parsed.ok || !TRACK_ID_ALPHANUM_RE2.test(parsed.trackId)) {
+    return { ok: false, error: "not_found" };
+  }
+  const frameUrl = new URL("/frame", origin);
+  frameUrl.searchParams.set("url", canonical);
+  return { ok: true, frameUrl: frameUrl.toString() };
+}
+function jsonResponse(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
+}
+async function handleCastTriggerResolveRequest(request) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    });
+  }
+  if (request.method !== "POST") {
+    return jsonResponse({ ok: false, error: "method_not_allowed" }, 405);
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ ok: false, error: "invalid_body" }, 400);
+  }
+  const parsedBody = CastResolveBodySchema.safeParse(body);
+  if (!parsedBody.success) {
+    return jsonResponse({ ok: false, error: "invalid_body" }, 400);
+  }
+  const origin = new URL(request.url).origin;
+  const result = await resolveCastToFrameUrl(
+    origin,
+    parsedBody.data.text,
+    parsedBody.data.embeds
+  );
+  if (!result.ok) {
+    return jsonResponse(result);
+  }
+  return jsonResponse(result);
+}
+function castTriggerErrorMessage(error48) {
+  if (error48 === "invalid") {
+    return "No SoundCloud link was found in this cast.";
+  }
+  return "The SoundCloud link in this cast could not be resolved. It may be private or removed.";
+}
+function castTriggerPageResponse(origin) {
+  const resolveUrl = JSON.stringify(`${origin}/triggers/cast/resolve`);
+  return new Response(
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
+    />
+    <title>SoundFrame</title>
+    <script src="/miniapp-sdk.js"></script>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #121212;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      main {
+        max-width: 420px;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 1.35rem;
+      }
+      p {
+        margin: 0;
+        line-height: 1.5;
+        color: #c8c8c8;
+      }
+      .status {
+        margin-top: 16px;
+        color: #d4d4d4;
+      }
+      .error {
+        margin-top: 16px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 85, 0, 0.45);
+        background: rgba(255, 85, 0, 0.12);
+        color: #ffb38a;
+        text-align: left;
+      }
+      button {
+        margin-top: 16px;
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: ${theme.primary};
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .hidden { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>SoundFrame</h1>
+      <p id="intro">Looking for a SoundCloud link in this cast\u2026</p>
+      <p id="status" class="status" aria-live="polite"></p>
+      <p id="error" class="error hidden" role="alert"></p>
+      <button id="retry" class="hidden" type="button">Try again</button>
+    </main>
+    <script type="module">
+      const RESOLVE_URL = ${resolveUrl}
+      const intro = document.getElementById('intro')
+      const status = document.getElementById('status')
+      const error = document.getElementById('error')
+      const retry = document.getElementById('retry')
+
+      function showError(message) {
+        intro.textContent = 'Could not create a SoundFrame'
+        status.textContent = ''
+        error.textContent = message
+        error.classList.remove('hidden')
+        retry.classList.remove('hidden')
+      }
+
+      function getSdk() {
+        if (window.sdk) return window.sdk
+        if (typeof miniapp !== 'undefined' && miniapp.sdk) {
+          window.sdk = miniapp.sdk
+          return miniapp.sdk
+        }
+        return null
+      }
+
+      function readCastContext(sdk) {
+        const location = sdk?.context?.location
+        if (!location) return null
+
+        if (location.type === 'cast' && location.cast) {
+          return {
+            text: typeof location.cast.text === 'string' ? location.cast.text : '',
+            embeds: Array.isArray(location.cast.embeds)
+              ? location.cast.embeds.filter((item) => typeof item === 'string')
+              : [],
+          }
+        }
+
+        if (location.type === 'cast_share' && location.cast) {
+          return {
+            text: typeof location.cast.text === 'string' ? location.cast.text : '',
+            embeds: Array.isArray(location.cast.embeds)
+              ? location.cast.embeds.filter((item) => typeof item === 'string')
+              : [],
+          }
+        }
+
+        return null
+      }
+
+      async function resolveCastFrame(castContent) {
+        const response = await fetch(RESOLVE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(castContent),
+        })
+        return response.json()
+      }
+
+      async function run() {
+        retry.disabled = true
+        error.classList.add('hidden')
+        retry.classList.add('hidden')
+        status.textContent = 'Checking this cast for SoundCloud links\u2026'
+
+        const sdk = getSdk()
+        if (!sdk) {
+          showError('SoundFrame needs to be opened from a cast action in Warpcast.')
+          retry.disabled = false
+          return
+        }
+
+        try {
+          await sdk.actions.ready()
+        } catch (err) {
+          console.error('[SoundFrame] ready() failed:', err)
+        }
+
+        const castContent = readCastContext(sdk)
+        if (!castContent) {
+          showError('Open SoundFrame from the actions menu on a cast that contains a SoundCloud link.')
+          retry.disabled = false
+          return
+        }
+
+        try {
+          const result = await resolveCastFrame(castContent)
+          if (!result?.ok || typeof result.frameUrl !== 'string') {
+            const messages = {
+              invalid: ${JSON.stringify(castTriggerErrorMessage("invalid"))},
+              not_found: ${JSON.stringify(castTriggerErrorMessage("not_found"))},
+            }
+            const code = result?.error === 'not_found' ? 'not_found' : 'invalid'
+            showError(messages[code])
+            retry.disabled = false
+            return
+          }
+
+          status.textContent = 'Opening composer with your SoundFrame\u2026'
+          if (!sdk.actions?.composeCast) {
+            showError('This client does not support composing casts from SoundFrame.')
+            retry.disabled = false
+            return
+          }
+
+          const composeResult = await sdk.actions.composeCast({
+            embeds: [result.frameUrl],
+            close: true,
+          })
+
+          if (!composeResult?.cast) {
+            intro.textContent = 'Cancelled'
+            status.textContent = 'No cast was created.'
+          } else {
+            intro.textContent = 'SoundFrame ready'
+            status.textContent = 'Your cast composer was opened with the Listen frame.'
+          }
+        } catch (err) {
+          console.error('[SoundFrame] cast trigger failed:', err)
+          showError('Something went wrong while creating your SoundFrame. Please try again.')
+          retry.disabled = false
+        }
+      }
+
+      retry.addEventListener('click', () => {
+        void run()
+      })
+
+      void run()
+    </script>
+  </body>
+</html>`,
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8" }
+    }
+  );
+}
+var CAST_TRIGGER_PATH = "/triggers/cast";
+var CAST_TRIGGER_RESOLVE_PATH = "/triggers/cast/resolve";
+var API_CAST_TRIGGER_PATH = "/api/triggers/cast";
+var API_CAST_TRIGGER_RESOLVE_PATH = "/api/triggers/cast/resolve";
+function isCastTriggerResolveRequest(pathname) {
+  return pathname === CAST_TRIGGER_RESOLVE_PATH || pathname === API_CAST_TRIGGER_RESOLVE_PATH;
+}
+function isCastTriggerPageRequest(pathname) {
+  return pathname === CAST_TRIGGER_PATH || pathname === API_CAST_TRIGGER_PATH;
+}
+
+// lib/manifest.ts
+var FARCASTER_ACCOUNT_ASSOCIATION = {
+  header: "eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ",
+  payload: "eyJkb21haW4iOiJzb3VuZGZyYW1lLnZlcmNlbC5hcHAifQ",
+  signature: "i+8KKO83+nUovwEFKqUWFKxT8aqsLrzpxQPrUaT6Xy8QiYvV4A/rpqu1lUtJJBpZpexl+7sJBr//4vpMvJdzDhw="
+};
+var FARCASTER_MINIAPP_CONFIG = {
+  version: "1",
+  name: "SoundFrame",
+  description: "Share SoundCloud tracks in Farcaster with an embedded player. Paste a link and play in-app.",
+  subtitle: "SoundCloud for Farcaster",
+  primaryCategory: "music",
+  tags: ["music", "soundcloud", "player"],
+  splashBackgroundColor: "#121212"
+};
+function buildFarcasterManifest(origin) {
+  const base = origin.replace(/\/$/, "");
+  const miniapp = {
+    ...FARCASTER_MINIAPP_CONFIG,
+    iconUrl: `${base}/splash.png`,
+    homeUrl: `${base}/player`,
+    splashImageUrl: `${base}/splash.png`
+  };
+  return {
+    accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
+    miniapp,
+    frame: miniapp,
+    triggers: [
+      {
+        type: "cast",
+        id: CAST_TRIGGER_ID,
+        url: `${base}/triggers/cast`,
+        name: CAST_TRIGGER_NAME
+      }
+    ]
+  };
+}
+function isFarcasterManifestRequest(request) {
+  const { pathname } = new URL(request.url);
+  return pathname === "/.well-known/farcaster.json" || pathname === "/api/.well-known/farcaster.json";
+}
+function farcasterManifestResponse(request) {
+  const origin = new URL(request.url).origin;
+  return new Response(JSON.stringify(buildFarcasterManifest(origin)), {
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
+}
+
 // lib/embed.ts
 function buildPlayerHomeEmbed(origin) {
   const base = origin.replace(/\/$/, "");
@@ -65743,9 +66066,9 @@ function embedMetaTags(embed) {
 }
 
 // lib/player-pages.ts
-var TRACK_ID_ALPHANUM_RE2 = /^[A-Za-z0-9]+$/;
+var TRACK_ID_ALPHANUM_RE3 = /^[A-Za-z0-9]+$/;
 var PlayerTrackParamsSchema = external_exports.object({
-  trackId: external_exports.string().regex(TRACK_ID_ALPHANUM_RE2)
+  trackId: external_exports.string().regex(TRACK_ID_ALPHANUM_RE3)
 });
 var PlayerArtworkQuerySchema = external_exports.object({
   artwork: external_exports.string().url().optional()
@@ -65971,7 +66294,7 @@ async function resolveFrameUrlSubmission(rawUrl) {
   } catch {
     return { status: "not_found" };
   }
-  if (!parsed.ok || !TRACK_ID_ALPHANUM_RE2.test(parsed.trackId)) {
+  if (!parsed.ok || !TRACK_ID_ALPHANUM_RE3.test(parsed.trackId)) {
     return { status: "not_found" };
   }
   return { status: "ok", trackId: parsed.trackId };
@@ -66216,7 +66539,7 @@ async function handlePlayerRouteRequest(request) {
 
 // lib/app.tsx
 var SOUND_CLOUD_ALLOWED_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
-var TRACK_ID_ALPHANUM_RE3 = /^[A-Za-z0-9]+$/;
+var TRACK_ID_ALPHANUM_RE4 = /^[A-Za-z0-9]+$/;
 var LANDSCAPE_FRAME_WIDTH = 900;
 var LANDSCAPE_FRAME_HEIGHT = 600;
 var LANDSCAPE_FRAME_IMAGE_OPTS = {
@@ -66284,7 +66607,7 @@ async function fetchSoundCloudOEmbedArtwork(inputUrlRaw) {
   }
 }
 function isValidTrackId(trackId) {
-  return TRACK_ID_ALPHANUM_RE3.test(trackId);
+  return TRACK_ID_ALPHANUM_RE4.test(trackId);
 }
 var PLAYER_HOME_PATH = "/player";
 var PLAYER_PATH_RE = /^\/player\/[A-Za-z0-9]+$/;
@@ -66347,6 +66670,12 @@ app.fetch = async (request, env, executionCtx) => {
   }
   if (isFrameDocumentRequest(request, pathname)) {
     return handleFrameDocumentRequest(request);
+  }
+  if (isCastTriggerResolveRequest(pathname)) {
+    return handleCastTriggerResolveRequest(request);
+  }
+  if (isCastTriggerPageRequest(pathname)) {
+    return castTriggerPageResponse(new URL(request.url).origin);
   }
   return frogFetch(request, env, executionCtx);
 };
@@ -66573,7 +66902,7 @@ app.frame("/frame", async (c3) => {
 // server/entry.prod.tsx
 function normalizeRequestUrl(request) {
   const url2 = new URL(request.url);
-  if (url2.pathname === "/frame" || url2.pathname.startsWith("/frame/") || url2.pathname === "/player" || url2.pathname.startsWith("/player/")) {
+  if (url2.pathname === "/frame" || url2.pathname.startsWith("/frame/") || url2.pathname === "/player" || url2.pathname.startsWith("/player/") || url2.pathname === "/triggers/cast" || url2.pathname.startsWith("/triggers/")) {
     url2.pathname = `/api${url2.pathname}`;
     return new Request(url2, request);
   }

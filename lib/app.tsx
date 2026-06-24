@@ -4,6 +4,12 @@ import { Hono, type Context } from 'hono'
 import { z } from 'zod'
 import { embedCardImageResponse } from './embed-card.js'
 import {
+  castTriggerPageResponse,
+  handleCastTriggerResolveRequest,
+  isCastTriggerPageRequest,
+  isCastTriggerResolveRequest,
+} from './cast-trigger.js'
+import {
   buildFarcasterManifest,
   farcasterManifestResponse,
   isFarcasterManifestRequest,
@@ -208,6 +214,12 @@ app.fetch = async (request, env, executionCtx) => {
   }
   if (isFrameDocumentRequest(request, pathname)) {
     return handleFrameDocumentRequest(request)
+  }
+  if (isCastTriggerResolveRequest(pathname)) {
+    return handleCastTriggerResolveRequest(request)
+  }
+  if (isCastTriggerPageRequest(pathname)) {
+    return castTriggerPageResponse(new URL(request.url).origin)
   }
   return frogFetch(request, env, executionCtx)
 }

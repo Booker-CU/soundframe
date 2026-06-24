@@ -47,6 +47,14 @@
     {
       "source": "/player/:trackId",
       "destination": "/api/player/:trackId"
+    },
+    {
+      "source": "/triggers/cast",
+      "destination": "/api/triggers/cast"
+    },
+    {
+      "source": "/triggers/cast/resolve",
+      "destination": "/api/triggers/cast/resolve"
     }
   ]
 }

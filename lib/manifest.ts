@@ -2,6 +2,11 @@
  * Farcaster Mini App manifest (v2).
  * Webhook notification secrets are server-side env vars, not manifest fields.
  */
+import {
+  CAST_TRIGGER_ID,
+  CAST_TRIGGER_NAME,
+} from './cast-trigger.js'
+
 export const FARCASTER_ACCOUNT_ASSOCIATION = {
   header:
     'eyJmaWQiOjI0MDk1OSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDU3RjUxZUE2NzhGOWU4MDNGMUZCNWIwNjQxOGEyYjI0YTdmYzVmNzUifQ',
@@ -33,6 +38,14 @@ export function buildFarcasterManifest(origin: string) {
     accountAssociation: FARCASTER_ACCOUNT_ASSOCIATION,
     miniapp,
     frame: miniapp,
+    triggers: [
+      {
+        type: 'cast',
+        id: CAST_TRIGGER_ID,
+        url: `${base}/triggers/cast`,
+        name: CAST_TRIGGER_NAME,
+      },
+    ],
   }
 }
 

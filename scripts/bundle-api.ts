@@ -27,6 +27,7 @@ rmSync('api/frame/image.js', { force: true })
 rmSync('api/player.js', { force: true })
 rmSync('api/player/[trackId].js', { force: true })
 rmSync('api/embed-card.js', { force: true })
+rmSync('api/triggers', { recursive: true, force: true })
 
 const origin = deploymentOrigin()
 const embedJson = serializeEmbedForMetaTag(buildPlayerHomeEmbed(origin))
@@ -77,6 +78,13 @@ mkdirSync('api/player', { recursive: true })
 writeFileSync('api/player.js', "export { default, GET, POST } from './index.js'\n")
 writeFileSync('api/player/[trackId].js', "export { default, GET, POST } from '../index.js'\n")
 writeFileSync('api/embed-card.js', "export { default, GET, POST } from './index.js'\n")
+
+mkdirSync('api/triggers/cast', { recursive: true })
+writeFileSync('api/triggers/cast.js', "export { default, GET, POST } from '../../index.js'\n")
+writeFileSync(
+  'api/triggers/cast/resolve.js',
+  "export { default, GET, POST } from '../../index.js'\n"
+)
 
 mkdirSync('api/.well-known', { recursive: true })
 writeFileSync(
