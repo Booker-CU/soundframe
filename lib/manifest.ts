@@ -25,7 +25,7 @@ export const FARCASTER_MINIAPP_CONFIG = {
   name: 'SoundFrame',
   description:
     'Share SoundCloud tracks in Farcaster with an embedded player. Paste a link and play in-app.',
-  subtitle: 'SoundCloud for Farcaster',
+  subtitle: 'Listen to SoundCloud in Farcaster',
   primaryCategory: 'music',
   tags: ['music', 'soundcloud', 'player'],
   splashBackgroundColor: '#121212',
