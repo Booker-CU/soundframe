@@ -61,6 +61,10 @@
       "destination": "/api/triggers/composer"
     },
     {
+      "source": "/triggers/composer/form",
+      "destination": "/api/triggers/composer/form"
+    },
+    {
       "source": "/triggers/composer/resolve",
       "destination": "/api/triggers/composer/resolve"
     }

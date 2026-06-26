@@ -23,6 +23,59 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+function composerFormUrl(origin: string): string {
+  return `${origin.replace(/\/$/, '')}/triggers/composer/form`
+}
+
+/** Legacy Warpcast composer-action catalog metadata (GET /triggers/composer). */
+export function composerActionMetadataResponse(origin: string) {
+  const base = origin.replace(/\/$/, '')
+  return jsonResponse({
+    type: 'composer',
+    name: COMPOSER_TRIGGER_NAME,
+    icon: 'music',
+    description: 'Paste a SoundCloud link to add a Listen frame to your cast.',
+    aboutUrl: `${base}/player`,
+    imageUrl: `${base}/splash.png`,
+    action: {
+      type: 'post',
+    },
+  })
+}
+
+/** Legacy Warpcast composer-action invoke response (POST /triggers/composer). */
+export function composerActionFormResponse(origin: string) {
+  return jsonResponse({
+    type: 'form',
+    title: 'SoundFrame',
+    url: composerFormUrl(origin),
+  })
+}
+
+export async function handleComposerTriggerRequest(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    })
+  }
+
+  const origin = new URL(request.url).origin
+
+  if (request.method === 'GET') {
+    return composerActionMetadataResponse(origin)
+  }
+
+  if (request.method === 'POST') {
+    return composerActionFormResponse(origin)
+  }
+
+  return jsonResponse({ ok: false, error: 'method_not_allowed' }, 405)
+}
 
 export async function handleComposerTriggerResolveRequest(request: Request): Promise<Response> {
   if (request.method === 'OPTIONS') {
@@ -62,7 +115,7 @@ export async function handleComposerTriggerResolveRequest(request: Request): Pro
   return jsonResponse(result)
 }
 
-export function composerTriggerPageResponse(origin: string) {
+export function composerTriggerFormPageResponse(origin: string) {
   const resolveUrl = JSON.stringify(`${origin}/triggers/composer/resolve`)
   const errorMessages = JSON.stringify({
     invalid: frameUrlErrorMessage('invalid'),
@@ -214,8 +267,10 @@ export function composerTriggerPageResponse(origin: string) {
 }
 
 const COMPOSER_TRIGGER_PATH = '/triggers/composer'
+const COMPOSER_TRIGGER_FORM_PATH = '/triggers/composer/form'
 const COMPOSER_TRIGGER_RESOLVE_PATH = '/triggers/composer/resolve'
 const API_COMPOSER_TRIGGER_PATH = '/api/triggers/composer'
+const API_COMPOSER_TRIGGER_FORM_PATH = '/api/triggers/composer/form'
 const API_COMPOSER_TRIGGER_RESOLVE_PATH = '/api/triggers/composer/resolve'
 
 export function isComposerTriggerResolveRequest(pathname: string): boolean {
@@ -225,6 +280,12 @@ export function isComposerTriggerResolveRequest(pathname: string): boolean {
   )
 }
 
-export function isComposerTriggerPageRequest(pathname: string): boolean {
+export function isComposerTriggerFormRequest(pathname: string): boolean {
+  return (
+    pathname === COMPOSER_TRIGGER_FORM_PATH || pathname === API_COMPOSER_TRIGGER_FORM_PATH
+  )
+}
+
+export function isComposerTriggerActionRequest(pathname: string): boolean {
   return pathname === COMPOSER_TRIGGER_PATH || pathname === API_COMPOSER_TRIGGER_PATH
 }

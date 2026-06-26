@@ -66117,7 +66117,7 @@ function buildFarcasterManifest(origin) {
       {
         type: "composer",
         id: COMPOSER_TRIGGER_ID,
-        url: `${base}/triggers/composer`,
+        url: `${base}/triggers/composer/form`,
         name: COMPOSER_TRIGGER_NAME
       }
     ]
@@ -66693,6 +66693,50 @@ function jsonResponse2(body, status = 200) {
     }
   });
 }
+function composerFormUrl(origin) {
+  return `${origin.replace(/\/$/, "")}/triggers/composer/form`;
+}
+function composerActionMetadataResponse(origin) {
+  const base = origin.replace(/\/$/, "");
+  return jsonResponse2({
+    type: "composer",
+    name: COMPOSER_TRIGGER_NAME,
+    icon: "music",
+    description: "Paste a SoundCloud link to add a Listen frame to your cast.",
+    aboutUrl: `${base}/player`,
+    imageUrl: `${base}/splash.png`,
+    action: {
+      type: "post"
+    }
+  });
+}
+function composerActionFormResponse(origin) {
+  return jsonResponse2({
+    type: "form",
+    title: "SoundFrame",
+    url: composerFormUrl(origin)
+  });
+}
+async function handleComposerTriggerRequest(request) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    });
+  }
+  const origin = new URL(request.url).origin;
+  if (request.method === "GET") {
+    return composerActionMetadataResponse(origin);
+  }
+  if (request.method === "POST") {
+    return composerActionFormResponse(origin);
+  }
+  return jsonResponse2({ ok: false, error: "method_not_allowed" }, 405);
+}
 async function handleComposerTriggerResolveRequest(request) {
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -66724,7 +66768,7 @@ async function handleComposerTriggerResolveRequest(request) {
   }
   return jsonResponse2(result);
 }
-function composerTriggerPageResponse(origin) {
+function composerTriggerFormPageResponse(origin) {
   const resolveUrl = JSON.stringify(`${origin}/triggers/composer/resolve`);
   const errorMessages = JSON.stringify({
     invalid: frameUrlErrorMessage("invalid"),
@@ -66874,13 +66918,18 @@ function composerTriggerPageResponse(origin) {
   );
 }
 var COMPOSER_TRIGGER_PATH = "/triggers/composer";
+var COMPOSER_TRIGGER_FORM_PATH = "/triggers/composer/form";
 var COMPOSER_TRIGGER_RESOLVE_PATH = "/triggers/composer/resolve";
 var API_COMPOSER_TRIGGER_PATH = "/api/triggers/composer";
+var API_COMPOSER_TRIGGER_FORM_PATH = "/api/triggers/composer/form";
 var API_COMPOSER_TRIGGER_RESOLVE_PATH = "/api/triggers/composer/resolve";
 function isComposerTriggerResolveRequest(pathname) {
   return pathname === COMPOSER_TRIGGER_RESOLVE_PATH || pathname === API_COMPOSER_TRIGGER_RESOLVE_PATH;
 }
-function isComposerTriggerPageRequest(pathname) {
+function isComposerTriggerFormRequest(pathname) {
+  return pathname === COMPOSER_TRIGGER_FORM_PATH || pathname === API_COMPOSER_TRIGGER_FORM_PATH;
+}
+function isComposerTriggerActionRequest(pathname) {
   return pathname === COMPOSER_TRIGGER_PATH || pathname === API_COMPOSER_TRIGGER_PATH;
 }
 
@@ -67024,11 +67073,14 @@ app.fetch = async (request, env, executionCtx) => {
   if (isComposerTriggerResolveRequest(pathname)) {
     return handleComposerTriggerResolveRequest(request);
   }
+  if (isComposerTriggerFormRequest(pathname)) {
+    return composerTriggerFormPageResponse(new URL(request.url).origin);
+  }
+  if (isComposerTriggerActionRequest(pathname)) {
+    return handleComposerTriggerRequest(request);
+  }
   if (isCastTriggerPageRequest(pathname)) {
     return castTriggerPageResponse(new URL(request.url).origin);
-  }
-  if (isComposerTriggerPageRequest(pathname)) {
-    return composerTriggerPageResponse(new URL(request.url).origin);
   }
   return frogFetch(request, env, executionCtx);
 };

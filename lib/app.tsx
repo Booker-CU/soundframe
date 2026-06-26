@@ -10,9 +10,11 @@ import {
   isCastTriggerResolveRequest,
 } from './cast-trigger.js'
 import {
-  composerTriggerPageResponse,
+  composerTriggerFormPageResponse,
+  handleComposerTriggerRequest,
   handleComposerTriggerResolveRequest,
-  isComposerTriggerPageRequest,
+  isComposerTriggerActionRequest,
+  isComposerTriggerFormRequest,
   isComposerTriggerResolveRequest,
 } from './composer-trigger.js'
 import {
@@ -227,11 +229,14 @@ app.fetch = async (request, env, executionCtx) => {
   if (isComposerTriggerResolveRequest(pathname)) {
     return handleComposerTriggerResolveRequest(request)
   }
+  if (isComposerTriggerFormRequest(pathname)) {
+    return composerTriggerFormPageResponse(new URL(request.url).origin)
+  }
+  if (isComposerTriggerActionRequest(pathname)) {
+    return handleComposerTriggerRequest(request)
+  }
   if (isCastTriggerPageRequest(pathname)) {
     return castTriggerPageResponse(new URL(request.url).origin)
-  }
-  if (isComposerTriggerPageRequest(pathname)) {
-    return composerTriggerPageResponse(new URL(request.url).origin)
   }
   return frogFetch(request, env, executionCtx)
 }

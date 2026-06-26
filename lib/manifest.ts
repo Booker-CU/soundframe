@@ -54,7 +54,7 @@ export function buildFarcasterManifest(origin: string) {
       {
         type: 'composer',
         id: COMPOSER_TRIGGER_ID,
-        url: `${base}/triggers/composer`,
+        url: `${base}/triggers/composer/form`,
         name: COMPOSER_TRIGGER_NAME,
       },
     ],
