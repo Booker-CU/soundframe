@@ -86,6 +86,13 @@ writeFileSync(
   "export { default, GET, POST } from '../../index.js'\n"
 )
 
+mkdirSync('api/triggers/composer', { recursive: true })
+writeFileSync('api/triggers/composer.js', "export { default, GET, POST } from '../index.js'\n")
+writeFileSync(
+  'api/triggers/composer/resolve.js',
+  "export { default, GET, POST } from '../../index.js'\n"
+)
+
 mkdirSync('api/.well-known', { recursive: true })
 writeFileSync(
   'api/.well-known/farcaster.json.js',

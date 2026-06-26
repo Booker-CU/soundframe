@@ -55,6 +55,14 @@
     {
       "source": "/triggers/cast/resolve",
       "destination": "/api/triggers/cast/resolve"
+    },
+    {
+      "source": "/triggers/composer",
+      "destination": "/api/triggers/composer"
+    },
+    {
+      "source": "/triggers/composer/resolve",
+      "destination": "/api/triggers/composer/resolve"
     }
   ]
 }

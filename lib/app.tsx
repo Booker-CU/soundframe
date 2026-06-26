@@ -10,6 +10,12 @@ import {
   isCastTriggerResolveRequest,
 } from './cast-trigger.js'
 import {
+  composerTriggerPageResponse,
+  handleComposerTriggerResolveRequest,
+  isComposerTriggerPageRequest,
+  isComposerTriggerResolveRequest,
+} from './composer-trigger.js'
+import {
   buildFarcasterManifest,
   farcasterManifestResponse,
   isFarcasterManifestRequest,
@@ -218,8 +224,14 @@ app.fetch = async (request, env, executionCtx) => {
   if (isCastTriggerResolveRequest(pathname)) {
     return handleCastTriggerResolveRequest(request)
   }
+  if (isComposerTriggerResolveRequest(pathname)) {
+    return handleComposerTriggerResolveRequest(request)
+  }
   if (isCastTriggerPageRequest(pathname)) {
     return castTriggerPageResponse(new URL(request.url).origin)
+  }
+  if (isComposerTriggerPageRequest(pathname)) {
+    return composerTriggerPageResponse(new URL(request.url).origin)
   }
   return frogFetch(request, env, executionCtx)
 }

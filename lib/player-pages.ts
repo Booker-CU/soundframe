@@ -139,7 +139,7 @@ try {
 </script>`
 }
 
-function miniAppShellHtml(body: string, headExtras = '') {
+export function miniAppShellHtml(body: string, headExtras = '') {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -219,7 +219,7 @@ function miniAppShellHtml(body: string, headExtras = '') {
 </html>`
 }
 
-type FrameUrlError = 'invalid' | 'not_found'
+export type FrameUrlError = 'invalid' | 'not_found'
 
 function escapeHtmlAttr(value: string): string {
   return value
@@ -229,26 +229,36 @@ function escapeHtmlAttr(value: string): string {
     .replace(/>/g, '&gt;')
 }
 
-function soundCloudUrlFormHtml(submittedUrl?: string): string {
+export function soundCloudUrlFormHtml(
+  submittedUrl?: string,
+  options?: { formId?: string }
+): string {
   const valueAttr = submittedUrl
     ? ` value="${escapeHtmlAttr(submittedUrl)}"`
     : ''
+  const formAttrs = options?.formId
+    ? `id="${options.formId}"`
+    : 'method="GET" action="/frame"'
   return `
-      <form method="GET" action="/frame">
+      <form ${formAttrs}>
         <input name="url" type="url" placeholder="https://soundcloud.com/..." required${valueAttr} />
         <button type="submit">Load Track</button>
       </form>
 `
 }
 
-function frameUrlErrorMessage(error: FrameUrlError): string {
+export function frameUrlErrorMessage(error: FrameUrlError): string {
   if (error === 'invalid') {
     return "That doesn't look like a valid SoundCloud link. Check the URL and try again."
   }
   return 'Track not found. It may be private, removed, or unavailable.'
 }
 
-function playerLandingBody(error?: FrameUrlError, submittedUrl?: string): string {
+export function playerLandingBody(
+  error?: FrameUrlError,
+  submittedUrl?: string,
+  options?: { formId?: string }
+): string {
   const errorBlock = error
     ? `<p class="error" role="alert">${frameUrlErrorMessage(error)}</p>`
     : ''
@@ -256,7 +266,7 @@ function playerLandingBody(error?: FrameUrlError, submittedUrl?: string): string
       <h1>SoundFrame</h1>
       <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
       ${errorBlock}
-      ${soundCloudUrlFormHtml(submittedUrl)}
+      ${soundCloudUrlFormHtml(submittedUrl, options)}
     `
 }
 

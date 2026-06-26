@@ -7,6 +7,10 @@ import {
   CAST_TRIGGER_NAME,
   castShareUrl,
 } from './cast-trigger.js'
+import {
+  COMPOSER_TRIGGER_ID,
+  COMPOSER_TRIGGER_NAME,
+} from './composer-trigger.js'
 
 export const FARCASTER_ACCOUNT_ASSOCIATION = {
   header:
@@ -46,6 +50,12 @@ export function buildFarcasterManifest(origin: string) {
         id: CAST_TRIGGER_ID,
         url: `${base}/triggers/cast`,
         name: CAST_TRIGGER_NAME,
+      },
+      {
+        type: 'composer',
+        id: COMPOSER_TRIGGER_ID,
+        url: `${base}/triggers/composer`,
+        name: COMPOSER_TRIGGER_NAME,
       },
     ],
   }

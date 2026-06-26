@@ -10,7 +10,7 @@ Build a lightweight, stateless bridge using Frog.fm and Hono.
 
 ## 3. The Roadmap (Future Phases)
 - Phase 2: Add "Cast Actions" so users can convert links from any cast they see.
-- Phase 3: Add "Composer Actions" to help users search SoundCloud while writing a cast.
+- Phase 3: Add "Composer Actions" so users can paste a SoundCloud link while writing a cast.
 - Phase 4: Creator Analytics (using stateless signed messages).
 
 ## 4. Engineering Philosophy

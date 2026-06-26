@@ -66113,6 +66113,12 @@ function buildFarcasterManifest(origin) {
         id: CAST_TRIGGER_ID,
         url: `${base}/triggers/cast`,
         name: CAST_TRIGGER_NAME
+      },
+      {
+        type: "composer",
+        id: COMPOSER_TRIGGER_ID,
+        url: `${base}/triggers/composer`,
+        name: COMPOSER_TRIGGER_NAME
       }
     ]
   };
@@ -66389,10 +66395,11 @@ function miniAppShellHtml(body, headExtras = "") {
 function escapeHtmlAttr(value) {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-function soundCloudUrlFormHtml(submittedUrl) {
+function soundCloudUrlFormHtml(submittedUrl, options) {
   const valueAttr = submittedUrl ? ` value="${escapeHtmlAttr(submittedUrl)}"` : "";
+  const formAttrs = options?.formId ? `id="${options.formId}"` : 'method="GET" action="/frame"';
   return `
-      <form method="GET" action="/frame">
+      <form ${formAttrs}>
         <input name="url" type="url" placeholder="https://soundcloud.com/..." required${valueAttr} />
         <button type="submit">Load Track</button>
       </form>
@@ -66404,13 +66411,13 @@ function frameUrlErrorMessage(error48) {
   }
   return "Track not found. It may be private, removed, or unavailable.";
 }
-function playerLandingBody(error48, submittedUrl) {
+function playerLandingBody(error48, submittedUrl, options) {
   const errorBlock = error48 ? `<p class="error" role="alert">${frameUrlErrorMessage(error48)}</p>` : "";
   return `
       <h1>SoundFrame</h1>
       <p>Paste a SoundCloud link to open the player, or open a shared track from a cast.</p>
       ${errorBlock}
-      ${soundCloudUrlFormHtml(submittedUrl)}
+      ${soundCloudUrlFormHtml(submittedUrl, options)}
     `;
 }
 async function resolveFrameUrlSubmission(rawUrl) {
@@ -66671,6 +66678,212 @@ async function handlePlayerRouteRequest(request) {
   return playerTrackResponse(trackId, artworkSrc, origin);
 }
 
+// lib/composer-trigger.ts
+var COMPOSER_TRIGGER_ID = "soundframe-from-composer";
+var COMPOSER_TRIGGER_NAME = "Add SoundFrame";
+var ComposerResolveBodySchema = external_exports.object({
+  url: external_exports.string().min(1).max(2048)
+});
+function jsonResponse2(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
+}
+async function handleComposerTriggerResolveRequest(request) {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      }
+    });
+  }
+  if (request.method !== "POST") {
+    return jsonResponse2({ ok: false, error: "method_not_allowed" }, 405);
+  }
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse2({ ok: false, error: "invalid_body" }, 400);
+  }
+  const parsedBody = ComposerResolveBodySchema.safeParse(body);
+  if (!parsedBody.success) {
+    return jsonResponse2({ ok: false, error: "invalid_body" }, 400);
+  }
+  const origin = new URL(request.url).origin;
+  const result = await resolveCastToFrameUrl(origin, parsedBody.data.url.trim(), []);
+  if (!result.ok) {
+    return jsonResponse2(result);
+  }
+  return jsonResponse2(result);
+}
+function composerTriggerPageResponse(origin) {
+  const resolveUrl = JSON.stringify(`${origin}/triggers/composer/resolve`);
+  const errorMessages = JSON.stringify({
+    invalid: frameUrlErrorMessage("invalid"),
+    not_found: frameUrlErrorMessage("not_found")
+  });
+  return new Response(
+    miniAppShellHtml(
+      `${playerLandingBody(void 0, void 0, { formId: "paste-form" })}
+      <p id="status" style="margin-top:16px;color:#d4d4d4;" aria-live="polite"></p>`,
+      `<style>
+        button[type='submit']:disabled {
+          opacity: 0.6;
+          cursor: wait;
+        }
+      </style>`
+    ).replace(
+      "</body>",
+      `    <script type="module">
+      import { sdk } from 'https://esm.sh/@farcaster/miniapp-sdk'
+
+      const RESOLVE_URL = ${resolveUrl}
+      const ERROR_MESSAGES = ${errorMessages}
+      const form = document.getElementById('paste-form')
+      const status = document.getElementById('status')
+      const submitButton = form?.querySelector('button[type="submit"]')
+
+      window.sdk = sdk
+
+      function showFormError(message) {
+        let errorEl = document.querySelector('main .error')
+        if (!errorEl) {
+          errorEl = document.createElement('p')
+          errorEl.className = 'error'
+          errorEl.setAttribute('role', 'alert')
+          form?.insertAdjacentElement('beforebegin', errorEl)
+        }
+        errorEl.textContent = message
+      }
+
+      function clearFormError() {
+        const errorEl = document.querySelector('main .error')
+        errorEl?.remove()
+      }
+
+      function normalizeComposerEmbeds(embeds) {
+        if (!Array.isArray(embeds)) return []
+        const urls = []
+        for (const item of embeds) {
+          if (typeof item === 'string') urls.push(item)
+          else if (item && typeof item === 'object' && typeof item.url === 'string') {
+            urls.push(item.url)
+          }
+        }
+        return urls
+      }
+
+      async function readComposerDraft() {
+        const context = await Promise.resolve(sdk.context)
+        const location = context?.location
+        if (location?.type !== 'composer' || !location.cast) {
+          return { text: '', embeds: [] }
+        }
+        return {
+          text: typeof location.cast.text === 'string' ? location.cast.text : '',
+          embeds: normalizeComposerEmbeds(location.cast.embeds),
+        }
+      }
+
+      async function resolveFrameUrl(rawUrl) {
+        const response = await fetch(RESOLVE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: rawUrl }),
+        })
+        if (!response.ok) {
+          throw new Error('resolve_failed_' + response.status)
+        }
+        return response.json()
+      }
+
+      async function handleSubmit(event) {
+        event.preventDefault()
+        clearFormError()
+        status.textContent = ''
+
+        const input = form?.querySelector('input[name="url"]')
+        const rawUrl = typeof input?.value === 'string' ? input.value.trim() : ''
+        if (!rawUrl) return
+
+        if (submitButton) submitButton.disabled = true
+        status.textContent = 'Resolving track\u2026'
+
+        try {
+          const result = await resolveFrameUrl(rawUrl)
+          if (!result?.ok || typeof result.frameUrl !== 'string') {
+            const code = result?.error === 'not_found' ? 'not_found' : 'invalid'
+            showFormError(ERROR_MESSAGES[code])
+            status.textContent = ''
+            return
+          }
+
+          if (!sdk.actions?.composeCast) {
+            showFormError('This client does not support composing casts from SoundFrame.')
+            status.textContent = ''
+            return
+          }
+
+          status.textContent = 'Adding SoundFrame to your cast\u2026'
+          const draft = await readComposerDraft()
+          const embeds = [...draft.embeds, result.frameUrl]
+
+          const composeResult = await sdk.actions.composeCast({
+            text: draft.text || undefined,
+            embeds,
+            close: true,
+          })
+
+          if (!composeResult?.cast) {
+            status.textContent = 'Cancelled. No cast was updated.'
+          } else {
+            status.textContent = 'SoundFrame added to your cast.'
+          }
+        } catch (err) {
+          console.error('[SoundFrame] composer trigger failed:', err)
+          showFormError('Something went wrong while creating your SoundFrame. Please try again.')
+          status.textContent = ''
+        } finally {
+          if (submitButton) submitButton.disabled = false
+        }
+      }
+
+      try {
+        await sdk.actions.ready()
+      } catch (err) {
+        console.error('[SoundFrame] ready() failed:', err)
+      }
+
+      form?.addEventListener('submit', (event) => {
+        void handleSubmit(event)
+      })
+    </script>
+  </body>`
+    ),
+    {
+      headers: { "Content-Type": "text/html; charset=utf-8" }
+    }
+  );
+}
+var COMPOSER_TRIGGER_PATH = "/triggers/composer";
+var COMPOSER_TRIGGER_RESOLVE_PATH = "/triggers/composer/resolve";
+var API_COMPOSER_TRIGGER_PATH = "/api/triggers/composer";
+var API_COMPOSER_TRIGGER_RESOLVE_PATH = "/api/triggers/composer/resolve";
+function isComposerTriggerResolveRequest(pathname) {
+  return pathname === COMPOSER_TRIGGER_RESOLVE_PATH || pathname === API_COMPOSER_TRIGGER_RESOLVE_PATH;
+}
+function isComposerTriggerPageRequest(pathname) {
+  return pathname === COMPOSER_TRIGGER_PATH || pathname === API_COMPOSER_TRIGGER_PATH;
+}
+
 // lib/app.tsx
 var SOUND_CLOUD_ALLOWED_HOSTS = /* @__PURE__ */ new Set(["soundcloud.com", "www.soundcloud.com"]);
 var TRACK_ID_ALPHANUM_RE4 = /^[A-Za-z0-9]+$/;
@@ -66808,8 +67021,14 @@ app.fetch = async (request, env, executionCtx) => {
   if (isCastTriggerResolveRequest(pathname)) {
     return handleCastTriggerResolveRequest(request);
   }
+  if (isComposerTriggerResolveRequest(pathname)) {
+    return handleComposerTriggerResolveRequest(request);
+  }
   if (isCastTriggerPageRequest(pathname)) {
     return castTriggerPageResponse(new URL(request.url).origin);
+  }
+  if (isComposerTriggerPageRequest(pathname)) {
+    return composerTriggerPageResponse(new URL(request.url).origin);
   }
   return frogFetch(request, env, executionCtx);
 };
