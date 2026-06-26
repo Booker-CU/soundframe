@@ -2,6 +2,9 @@ node_modules
 
 .vercel
 
+# Local product docs (not published)
+PRD.md
+
 # Generated at build time (see scripts/bundle-api.ts)
 api/index.tsx
 public/.well-known/farcaster.json

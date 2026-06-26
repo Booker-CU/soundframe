@@ -80,25 +80,3 @@ If a link cannot be resolved, SoundFrame shows a clear error and a **Retry** opt
 SoundFrame follows the Farcaster Mini App and Frames v2 specs. It works in any client that supports mini apps and frame embeds — not only Warpcast. That includes other Farcaster clients and Neynar-powered apps that implement frame support.
 
 The **Open in SoundFrame** cast action (sharing an existing cast) is most reliable in Warpcast today. Composer actions and the direct player work broadly wherever mini apps are supported.
-
----
-
-## For developers
-
-Local development:
-
-```bash
-npm install
-npm run dev
-```
-
-Then open [http://localhost:5173/api](http://localhost:5173/api) (Frog dev server).
-
-Build for production:
-
-```bash
-npm run build
-npm run deploy
-```
-
-Stack: [Frog.fm](https://frog.fm) + Hono on Vercel Edge, Farcaster Frames v2 Mini App SDK, SoundCloud oEmbed for track resolution. See [PRD.md](./PRD.md) for architecture and requirements.
