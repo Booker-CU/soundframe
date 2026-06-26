@@ -36,7 +36,7 @@ export function composerActionMetadataResponse(origin: string) {
     icon: 'music',
     description: 'Paste a SoundCloud link to add a Listen frame to your cast.',
     aboutUrl: `${base}/player`,
-    imageUrl: `${base}/splash.png`,
+    imageUrl: `${base}/icon.png`,
     action: {
       type: 'post',
     },

@@ -29,7 +29,7 @@ export function buildPlayerHomeEmbed(origin: string): MiniAppEmbed {
         type: 'launch_frame',
         name: FARCASTER_MINIAPP_CONFIG.name,
         url: `${base}/player`,
-        splashImageUrl: `${base}/splash.png`,
+        splashImageUrl: `${base}/logo.png`,
         splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor,
       },
     },
@@ -45,14 +45,14 @@ export function buildPlayerTrackEmbed(
   const base = origin.replace(/\/$/, '')
   return {
     version: '1',
-    imageUrl: imageUrl ?? `${base}/splash.png`,
+    imageUrl: imageUrl ?? `${base}/logo.png`,
     button: {
       title: 'Listen',
       action: {
         type: 'launch_frame',
         name: FARCASTER_MINIAPP_CONFIG.name,
         url: `${base}/player/${trackId}`,
-        splashImageUrl: `${base}/splash.png`,
+        splashImageUrl: `${base}/logo.png`,
         splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor,
       },
     },
@@ -78,7 +78,7 @@ export function buildFramePageEmbed(
         type: actionType,
         name: FARCASTER_MINIAPP_CONFIG.name,
         url: `${base}/frame`,
-        splashImageUrl: `${base}/splash.png`,
+        splashImageUrl: `${base}/logo.png`,
         splashBackgroundColor: FARCASTER_MINIAPP_CONFIG.splashBackgroundColor,
       },
     },

@@ -35,9 +35,9 @@ export function buildFarcasterManifest(origin: string) {
   const base = origin.replace(/\/$/, '')
   const miniapp = {
     ...FARCASTER_MINIAPP_CONFIG,
-    iconUrl: `${base}/splash.png`,
+    iconUrl: `${base}/icon.png`,
     homeUrl: `${base}/player`,
-    splashImageUrl: `${base}/splash.png`,
+    splashImageUrl: `${base}/logo.png`,
     castShareUrl: castShareUrl(origin),
   }
   return {
