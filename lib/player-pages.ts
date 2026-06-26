@@ -153,6 +153,9 @@ export function miniAppShellHtml(body: string, headExtras = '') {
     ${farcasterReadyScript()}
     <style>
       :root { color-scheme: dark; }
+      *, *::before, *::after {
+        box-sizing: border-box;
+      }
       body {
         margin: 0;
         min-height: 100vh;
@@ -165,6 +168,7 @@ export function miniAppShellHtml(body: string, headExtras = '') {
         padding: 24px;
       }
       main {
+        width: 100%;
         max-width: 420px;
         text-align: center;
       }
@@ -188,12 +192,15 @@ export function miniAppShellHtml(body: string, headExtras = '') {
       }
       form {
         margin-top: 20px;
+        width: 100%;
         display: flex;
         flex-direction: column;
+        align-items: stretch;
         gap: 10px;
       }
       input[type='url'] {
         width: 100%;
+        min-width: 0;
         border: 1px solid #333;
         border-radius: 10px;
         padding: 12px 14px;
@@ -202,6 +209,7 @@ export function miniAppShellHtml(body: string, headExtras = '') {
         font-size: 16px;
       }
       button[type='submit'] {
+        width: 100%;
         border: 0;
         border-radius: 10px;
         padding: 12px 14px;
