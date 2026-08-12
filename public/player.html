@@ -7,8 +7,8 @@
       content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"
     />
     <title>SoundFrame</title>
-    <meta name="fc:miniapp" content='{"version":"1","imageUrl":"http://localhost:5173/frame-embed.png","button":{"title":"Load Track","action":{"type":"launch_frame","name":"SoundFrame","url":"http://localhost:5173/player","splashImageUrl":"http://localhost:5173/splash.png","splashBackgroundColor":"#121212"}}}' />
-    <meta name="fc:frame" content='{"version":"1","imageUrl":"http://localhost:5173/frame-embed.png","button":{"title":"Load Track","action":{"type":"launch_frame","name":"SoundFrame","url":"http://localhost:5173/player","splashImageUrl":"http://localhost:5173/splash.png","splashBackgroundColor":"#121212"}}}' />
+    <meta name="fc:miniapp" content='{"version":"1","imageUrl":"http://localhost:5173/frame-embed.png","button":{"title":"Load Track","action":{"type":"launch_frame","name":"SoundFrame","url":"http://localhost:5173/player","splashImageUrl":"http://localhost:5173/logo.png","splashBackgroundColor":"#121212"}}}' />
+    <meta name="fc:frame" content='{"version":"1","imageUrl":"http://localhost:5173/frame-embed.png","button":{"title":"Load Track","action":{"type":"launch_frame","name":"SoundFrame","url":"http://localhost:5173/player","splashImageUrl":"http://localhost:5173/logo.png","splashBackgroundColor":"#121212"}}}' />
     <script src="/miniapp-sdk.js"></script>
     <script>
       try {
@@ -163,12 +163,15 @@
       }
       form {
         margin-top: 20px;
+        width: 100%;
         display: flex;
         flex-direction: column;
+        align-items: stretch;
         gap: 10px;
       }
       input[type='url'] {
         width: 100%;
+        min-width: 0;
         border: 1px solid #333;
         border-radius: 10px;
         padding: 12px 14px;
@@ -177,6 +180,7 @@
         font-size: 16px;
       }
       button[type='submit'] {
+        width: 100%;
         border: 0;
         border-radius: 10px;
         padding: 12px 14px;

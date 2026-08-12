@@ -120,6 +120,12 @@ type OEmbedResponse = {
   [key: string]: unknown
 }
 
+const TRACK_PAGE_CANONICAL_URL_RE = /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i
+const TRACK_PAGE_OG_IMAGE_RE = /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i
+const TRACK_PAGE_TWITTER_IMAGE_RE =
+  /<meta[^>]+property=["']twitter:image["'][^>]+content=["']([^"']+)["']/i
+const TRACK_PAGE_ITEMPROP_IMAGE_RE = /<img[^>]+itemprop=["']image["'][^>]+src=["']([^"']+)["']/i
+
 function isOEmbedDebugEnabled(): boolean {
   // Keep this opt-in so production logs stay quiet.
   return (
@@ -136,6 +142,94 @@ function logOEmbedDebug(message: string, data?: Record<string, unknown>) {
     return
   }
   console.log(`[soundframe:oembed] ${message}`)
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+}
+
+function parseSoundCloudHttpUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+function extractTrackPageImageUrl(html: string): string | undefined {
+  const candidates = [
+    html.match(TRACK_PAGE_OG_IMAGE_RE)?.[1],
+    html.match(TRACK_PAGE_TWITTER_IMAGE_RE)?.[1],
+    html.match(TRACK_PAGE_ITEMPROP_IMAGE_RE)?.[1],
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const decoded = decodeHtmlAttribute(candidate)
+    const valid = parseSoundCloudHttpUrl(decoded)
+    if (valid) return valid
+  }
+
+  return undefined
+}
+
+async function resolveCanonicalTrackPageUrl(trackId: string): Promise<string | null> {
+  const widgetUrl =
+    `https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/${trackId}` +
+    '&show_artwork=true'
+
+  try {
+    const res = await fetch(widgetUrl, {
+      method: 'GET',
+      headers: {
+        accept: 'text/html',
+      },
+    })
+    if (!res.ok) return null
+
+    const html = await res.text()
+    const canonical = html.match(TRACK_PAGE_CANONICAL_URL_RE)?.[1]
+    if (!canonical) return null
+
+    const normalized = parseSoundCloudHttpUrl(decodeHtmlAttribute(canonical))
+    if (!normalized) return null
+
+    const canonicalUrl = new URL(normalized)
+    if (!SOUND_CLOUD_CANONICAL_HOSTS.has(canonicalUrl.hostname)) {
+      return null
+    }
+
+    return canonicalUrl.toString()
+  } catch {
+    return null
+  }
+}
+
+async function fetchTrackPageImageUrl(trackPageUrl: string): Promise<string | undefined> {
+  try {
+    const parsed = new URL(trackPageUrl)
+    if (!SOUND_CLOUD_CANONICAL_HOSTS.has(parsed.hostname)) return undefined
+
+    const res = await fetch(trackPageUrl, {
+      method: 'GET',
+      headers: {
+        accept: 'text/html',
+      },
+    })
+    if (!res.ok) return undefined
+
+    const html = await res.text()
+    return extractTrackPageImageUrl(html)
+  } catch {
+    return undefined
+  }
 }
 
 export type ParseSoundCloudUrlResult =
@@ -280,11 +374,38 @@ export function buildSoundCloudPlayerIframeUrl(params: {
   return `https://w.soundcloud.com/player/?url=${apiTrackUrlParam}&color=${colorParam}`
 }
 
+/** SoundCloud oEmbed sometimes returns a generic social placeholder instead of track art. */
+export function isSoundCloudPlaceholderArtwork(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname !== 'soundcloud.com' && parsed.hostname !== 'www.soundcloud.com') {
+      return false
+    }
+    return /fb_placeholder|placeholder/i.test(parsed.pathname)
+  } catch {
+    return false
+  }
+}
+
+function normalizeTrackArtworkUrl(url: string | undefined): string | undefined {
+  if (!url || isSoundCloudPlaceholderArtwork(url)) return undefined
+  return url
+}
+
 /** Smaller CDN variant for frame OG rasterization (avoids huge artwork flash). */
 export function frameArtworkUrlFromOEmbed(thumbnailUrl: string): string {
   return thumbnailUrl
     .replace(/-t\d+x\d+/gi, '-t200x200')
     .replace(/-(?:large|original)(?=\.(?:jpg|jpeg|png|webp))/i, '-t200x200')
+}
+
+/** Resolve artwork from a canonical soundcloud.com track URL (og:image / twitter:image). */
+export async function fetchTrackArtworkFromPageUrl(
+  trackPageUrl: string
+): Promise<string | undefined> {
+  const canonical = await normalizeSoundCloudInputUrl(trackPageUrl)
+  if (!canonical) return undefined
+  return normalizeTrackArtworkUrl(await fetchTrackPageImageUrl(canonical))
 }
 
 const OEmbedThumbnailSchema = z.object({
@@ -297,6 +418,14 @@ const OEmbedThumbnailSchema = z.object({
 export async function fetchTrackThumbnailUrl(trackId: string): Promise<string | undefined> {
   try {
     const id = TrackIdSchema.parse(trackId)
+    const canonicalTrackPageUrl = await resolveCanonicalTrackPageUrl(id)
+    if (canonicalTrackPageUrl) {
+      const trackPageImage = normalizeTrackArtworkUrl(
+        await fetchTrackPageImageUrl(canonicalTrackPageUrl)
+      )
+      if (trackPageImage) return trackPageImage
+    }
+
     const trackApiUrl = `https://api.soundcloud.com/tracks/${id}`
     const oEmbedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(trackApiUrl)}&format=json`
     const res = await fetch(oEmbedUrl, {
@@ -316,7 +445,7 @@ export async function fetchTrackThumbnailUrl(trackId: string): Promise<string | 
     }
 
     const parsed = OEmbedThumbnailSchema.safeParse(json)
-    return parsed.success ? parsed.data.thumbnail_url : undefined
+    return normalizeTrackArtworkUrl(parsed.success ? parsed.data.thumbnail_url : undefined)
   } catch {
     return undefined
   }

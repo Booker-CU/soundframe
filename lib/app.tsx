@@ -24,7 +24,9 @@ import {
 } from './manifest.js'
 import {
   extractSoundCloudUrlFromText,
+  fetchTrackArtworkFromPageUrl,
   frameArtworkUrlFromOEmbed,
+  isSoundCloudPlaceholderArtwork,
   normalizeSoundCloudInputUrl,
   parseSoundCloudUrl,
 } from './utils/soundcloud.js'
@@ -414,8 +416,14 @@ app.frame('/frame', async (c) => {
   let frameArtworkUrl: string | undefined
   try {
     const oEmbed = await fetchSoundCloudOEmbedArtwork(urlRaw)
-    if (oEmbed?.thumbnailUrl) {
+    if (oEmbed?.thumbnailUrl && !isSoundCloudPlaceholderArtwork(oEmbed.thumbnailUrl)) {
       frameArtworkUrl = frameArtworkUrlFromOEmbed(oEmbed.thumbnailUrl)
+    }
+    if (!frameArtworkUrl) {
+      const fromPage = await fetchTrackArtworkFromPageUrl(urlRaw)
+      if (fromPage) {
+        frameArtworkUrl = frameArtworkUrlFromOEmbed(fromPage)
+      }
     }
   } catch {
     // Frame falls back to inline placeholder (no icon.png flash).
